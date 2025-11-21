@@ -1,0 +1,18 @@
+# Kagenti E2E Test Dependencies
+
+# Testing framework
+pytest>=7.4.0
+pytest-timeout>=2.1.0
+pytest-xdist>=3.3.0  # For parallel test execution
+
+# Kubernetes client
+kubernetes>=27.2.0
+
+# HTTP requests
+requests>=2.31.0
+
+# Keycloak client
+python-keycloak>=3.7.0
+
+# JSON Web Token handling
+PyJWT>=2.8.0
