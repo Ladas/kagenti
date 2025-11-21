@@ -7,6 +7,7 @@ pytest-xdist>=3.3.0  # For parallel test execution
 
 # Kubernetes client
 kubernetes>=27.2.0
+urllib3>=1.26.0,<2.1.0  # Pin to avoid HTTPResponse.getheaders() deprecation
 
 # HTTP requests
 requests>=2.31.0
