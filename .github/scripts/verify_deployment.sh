@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set -euo pipefail
+set -eo pipefail
 
 # Colors for output
 RED='\033[0;31m'
@@ -229,9 +229,16 @@ show_pod_list() {
         local color=$GREEN
         case "$status" in
             Running)
-                # Check if all containers are ready
-                if [[ "$ready" != *"/"* ]] || [[ "${ready%/*}" -ne "${ready#*/}" ]]; then
-                    color=$YELLOW
+                # Check if all containers are ready (safely)
+                if [[ "$ready" == *"/"* ]]; then
+                    local ready_count="${ready%/*}"
+                    local total_count="${ready#*/}"
+                    # Only compare if both are numbers
+                    if [[ "$ready_count" =~ ^[0-9]+$ ]] && [[ "$total_count" =~ ^[0-9]+$ ]]; then
+                        if [ "$ready_count" -ne "$total_count" ]; then
+                            color=$YELLOW
+                        fi
+                    fi
                 fi
                 ;;
             Completed|Succeeded)
@@ -245,8 +252,9 @@ show_pod_list() {
                 ;;
         esac
 
-        # Highlight pods with high restart count
-        if [ "$restarts" -gt 3 ]; then
+        # Highlight pods with high restart count (safely extract number)
+        local restart_num=$(echo "$restarts" | grep -oE '^[0-9]+' || echo "0")
+        if [ "$restart_num" -gt 3 ] 2>/dev/null; then
             color=$RED
         fi
 

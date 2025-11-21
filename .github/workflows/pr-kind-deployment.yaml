@@ -214,8 +214,8 @@ jobs:
       - name: Verify deployment health
         run: |
           chmod +x .github/scripts/verify_deployment.sh
-          # Make non-blocking - deployments already verified by wait steps above
-          .github/scripts/verify_deployment.sh || echo "Health check had issues but deployments are ready"
+          # Non-blocking: deployments already verified by wait steps
+          .github/scripts/verify_deployment.sh || true
 
       - name: Install test dependencies
         run: |
