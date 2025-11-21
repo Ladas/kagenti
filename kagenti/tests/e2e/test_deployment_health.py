@@ -111,10 +111,19 @@ class TestWeatherToolDeployment:
             ready_replicas >= desired_replicas
         ), f"weather-tool deployment not ready: {ready_replicas}/{desired_replicas} replicas"
 
-    def test_weather_tool_pods_running(self, k8s_client):
+    def test_weather_tool_pods_running(self, k8s_client, k8s_apps_client):
         """Verify weather-tool pods are in Running state."""
+        # Get deployment to find actual label selector
+        deployment = k8s_apps_client.read_namespaced_deployment(
+            name="weather-tool", namespace="team1"
+        )
+
+        # Build label selector from deployment's matchLabels
+        match_labels = deployment.spec.selector.match_labels
+        label_selector = ",".join([f"{k}={v}" for k, v in match_labels.items()])
+
         pods = k8s_client.list_namespaced_pod(
-            namespace="team1", label_selector="app=weather-tool"
+            namespace="team1", label_selector=label_selector
         )
 
         assert len(pods.items) > 0, "No weather-tool pods found"
@@ -192,10 +201,19 @@ class TestWeatherServiceDeployment:
             ready_replicas >= desired_replicas
         ), f"weather-service deployment not ready: {ready_replicas}/{desired_replicas} replicas"
 
-    def test_weather_service_pods_running(self, k8s_client):
+    def test_weather_service_pods_running(self, k8s_client, k8s_apps_client):
         """Verify weather-service pods are in Running state."""
+        # Get deployment to find actual label selector
+        deployment = k8s_apps_client.read_namespaced_deployment(
+            name="weather-service", namespace="team1"
+        )
+
+        # Build label selector from deployment's matchLabels
+        match_labels = deployment.spec.selector.match_labels
+        label_selector = ",".join([f"{k}={v}" for k, v in match_labels.items()])
+
         pods = k8s_client.list_namespaced_pod(
-            namespace="team1", label_selector="app=weather-service"
+            namespace="team1", label_selector=label_selector
         )
 
         assert len(pods.items) > 0, "No weather-service pods found"
