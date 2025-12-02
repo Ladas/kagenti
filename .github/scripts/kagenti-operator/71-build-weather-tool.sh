@@ -8,12 +8,18 @@ log_step "71" "Building weather-tool image"
 
 kubectl apply -f "$REPO_ROOT/kagenti/examples/agents/weather_tool_build.yaml"
 
-# Wait for AgentBuild to exist
-timeout 300 bash -c 'until kubectl get agentbuild weather-tool-build -n team1 &> /dev/null; do sleep 2; done' || {
-    log_error "AgentBuild not created after 300s"
-    kubectl get agentbuilds -n team1
-    exit 1
-}
+# Wait for AgentBuild to exist (macOS compatible - no timeout command)
+for i in {1..150}; do
+    if kubectl get agentbuild weather-tool-build -n team1 &> /dev/null; then
+        break
+    fi
+    if [ "$i" -eq 150 ]; then
+        log_error "AgentBuild not created after 300s"
+        kubectl get agentbuilds -n team1
+        exit 1
+    fi
+    sleep 2
+done
 
 # Wait for build to succeed
 for i in {1..60}; do
