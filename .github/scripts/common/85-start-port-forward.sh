@@ -7,11 +7,65 @@ source "$SCRIPT_DIR/../lib/logging.sh"
 log_step "85" "Starting port-forward"
 
 # ============================================================================
+# Helper function for idempotent port-forward management
+# ============================================================================
+
+# Free a port by killing any process using it
+free_port() {
+    local port=$1
+    if lsof -ti:${port} >/dev/null 2>&1; then
+        log_info "Freeing port ${port} (killing existing process)"
+        lsof -ti:${port} | xargs kill -9 2>/dev/null || true
+        sleep 1
+    fi
+}
+
+# Start a port-forward idempotently
+# Usage: start_port_forward <name> <local_port> <namespace> <resource> <remote_port> <health_path>
+start_port_forward() {
+    local name=$1
+    local local_port=$2
+    local namespace=$3
+    local resource=$4
+    local remote_port=$5
+    local health_path=${6:-"/"}
+    local pid_file="/tmp/port-forward-${name}.pid"
+    local log_file="/tmp/port-forward-${name}.log"
+
+    log_info "Port-forwarding ${name} -> localhost:${local_port}"
+
+    # Free the port first (idempotent)
+    free_port ${local_port}
+
+    # Start port-forward in background
+    kubectl port-forward -n ${namespace} ${resource} ${local_port}:${remote_port} > ${log_file} 2>&1 &
+    local pid=$!
+
+    if [ "$IS_CI" = true ]; then
+        local env_var_name=$(echo "${name}_PORT_FORWARD_PID" | tr '[:lower:]-' '[:upper:]_')
+        echo "${env_var_name}=${pid}" >> $GITHUB_ENV
+    else
+        echo $pid > ${pid_file}
+    fi
+
+    # Wait for port-forward to be ready
+    for i in {1..10}; do
+        if curl -s http://localhost:${local_port}${health_path} >/dev/null 2>&1; then
+            log_success "${name} port-forward is ready (localhost:${local_port})"
+            return 0
+        fi
+        sleep 1
+    done
+    log_info "${name} port-forward started (health check not responding, may still be starting)"
+    return 0
+}
+
+# ============================================================================
 # Port-forward weather-service (agent) to localhost:8000
 # ============================================================================
 
 # Get pod name
-POD_NAME=$(kubectl get pod -n team1 -l app.kubernetes.io/name=weather-service -o jsonpath='{.items[0].metadata.name}')
+POD_NAME=$(kubectl get pod -n team1 -l app.kubernetes.io/name=weather-service -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
 
 if [ -z "$POD_NAME" ]; then
     log_error "No weather-service pod found"
@@ -19,75 +73,50 @@ if [ -z "$POD_NAME" ]; then
     exit 1
 fi
 
-log_info "Port-forwarding weather-service pod: $POD_NAME -> localhost:8000"
-
-# Start port-forward in background
-kubectl port-forward -n team1 pod/$POD_NAME 8000:8000 > /tmp/port-forward-agent.log 2>&1 &
-AGENT_PORT_FORWARD_PID=$!
-
-if [ "$IS_CI" = true ]; then
-    echo "AGENT_PORT_FORWARD_PID=$AGENT_PORT_FORWARD_PID" >> $GITHUB_ENV
-else
-    echo $AGENT_PORT_FORWARD_PID > /tmp/port-forward-agent.pid
-fi
-
-# Wait for agent port-forward to be ready
-for i in {1..10}; do
-    if curl -s http://localhost:8000/health >/dev/null 2>&1 || curl -s http://localhost:8000/ >/dev/null 2>&1; then
-        log_success "Agent port-forward is ready (localhost:8000)"
-        break
-    fi
-    sleep 1
-done
+start_port_forward "weather-service" 8000 "team1" "pod/$POD_NAME" 8000
 
 # ============================================================================
 # Port-forward Keycloak to localhost:8081
 # ============================================================================
 
-log_info "Port-forwarding Keycloak service -> localhost:8081"
-
-# Start Keycloak port-forward in background
-kubectl port-forward -n keycloak svc/keycloak-service 8081:8080 > /tmp/port-forward-keycloak.log 2>&1 &
-KEYCLOAK_PORT_FORWARD_PID=$!
-
-if [ "$IS_CI" = true ]; then
-    echo "KEYCLOAK_PORT_FORWARD_PID=$KEYCLOAK_PORT_FORWARD_PID" >> $GITHUB_ENV
-else
-    echo $KEYCLOAK_PORT_FORWARD_PID > /tmp/port-forward-keycloak.pid
-fi
-
-# Wait for Keycloak port-forward to be ready
-for i in {1..10}; do
-    if curl -s http://localhost:8081/health >/dev/null 2>&1 || curl -s http://localhost:8081/ >/dev/null 2>&1; then
-        log_success "Keycloak port-forward is ready (localhost:8081)"
-        break
-    fi
-    sleep 1
-done
+start_port_forward "keycloak" 8081 "keycloak" "svc/keycloak-service" 8080
 
 # ============================================================================
 # Port-forward Phoenix to localhost:6006
 # ============================================================================
 
-log_info "Port-forwarding Phoenix service -> localhost:6006"
+start_port_forward "phoenix" 6006 "kagenti-system" "svc/phoenix" 6006 "/graphql"
 
-# Start Phoenix port-forward in background
-kubectl port-forward -n kagenti-system svc/phoenix 6006:6006 > /tmp/port-forward-phoenix.log 2>&1 &
-PHOENIX_PORT_FORWARD_PID=$!
+# ============================================================================
+# Port-forward k8s-debug-agent to localhost:8001
+# ============================================================================
 
-if [ "$IS_CI" = true ]; then
-    echo "PHOENIX_PORT_FORWARD_PID=$PHOENIX_PORT_FORWARD_PID" >> $GITHUB_ENV
+if kubectl get deployment k8s-debug-agent -n kagenti-agents &> /dev/null; then
+    start_port_forward "k8s-debug-agent" 8001 "kagenti-agents" "deployment/k8s-debug-agent" 8000
 else
-    echo $PHOENIX_PORT_FORWARD_PID > /tmp/port-forward-phoenix.pid
+    log_info "k8s-debug-agent not deployed, skipping port-forward"
 fi
 
-# Wait for Phoenix port-forward to be ready
-for i in {1..10}; do
-    if curl -s http://localhost:6006/graphql >/dev/null 2>&1 || curl -s http://localhost:6006/ >/dev/null 2>&1; then
-        log_success "Phoenix port-forward is ready (localhost:6006)"
-        break
-    fi
-    sleep 1
-done
+# ============================================================================
+# Port-forward a2a-bridge to localhost:8002
+# ============================================================================
+
+if kubectl get deployment a2a-bridge -n kagenti-agents &> /dev/null; then
+    start_port_forward "a2a-bridge" 8002 "kagenti-agents" "svc/a2a-bridge" 8080
+else
+    log_info "a2a-bridge not deployed, skipping port-forward"
+fi
+
+# ============================================================================
+# Port-forward orchestrator-agent to localhost:8004
+# ============================================================================
+
+if kubectl get deployment orchestrator-agent -n kagenti-agents &> /dev/null; then
+    # Use deployment directly since the service may have wrong targetPort (8080 vs app's 8000)
+    start_port_forward "orchestrator-agent" 8004 "kagenti-agents" "deployment/orchestrator-agent" 8000 "/.well-known/agent.json"
+else
+    log_info "orchestrator-agent not deployed, skipping port-forward"
+fi
 
 log_success "All port-forwards started"
+log_info "Port mappings: weather-service:8000, keycloak:8081, phoenix:6006, k8s-debug-agent:8001, a2a-bridge:8002, orchestrator-agent:8004"
