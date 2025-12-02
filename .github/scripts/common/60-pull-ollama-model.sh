@@ -21,7 +21,9 @@ if pgrep -x "ollama" > /dev/null; then
     log_info "Ollama process already running, checking if responsive..."
 else
     log_info "Starting Ollama in background"
-    ollama serve > "$OLLAMA_LOG" 2>&1 &
+    # Start Ollama with OLLAMA_HOST=0.0.0.0 to listen on all interfaces
+    # This is required for Kind clusters to access Ollama from inside the Docker VM
+    OLLAMA_HOST=0.0.0.0 ollama serve > "$OLLAMA_LOG" 2>&1 &
     STARTED_OLLAMA=true
 fi
 
@@ -75,9 +77,17 @@ if ! ollama list | grep -q qwen2.5:0.5b; then
     while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
         log_info "Pulling qwen2.5:0.5b model (attempt $((RETRY_COUNT + 1))/$MAX_RETRIES)"
 
-        if timeout 300 ollama pull qwen2.5:0.5b; then
-            log_success "Model pull successful"
-            break
+        # macOS doesn't have timeout, use direct ollama pull
+        if [[ "${IS_MACOS:-false}" == "true" ]]; then
+            if ollama pull qwen2.5:0.5b; then
+                log_success "Model pull successful"
+                break
+            fi
+        else
+            if timeout 300 ollama pull qwen2.5:0.5b; then
+                log_success "Model pull successful"
+                break
+            fi
         fi
 
         RETRY_COUNT=$((RETRY_COUNT + 1))
