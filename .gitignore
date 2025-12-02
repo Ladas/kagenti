@@ -174,3 +174,9 @@ cython_debug/
 
 # Local testing scripts (not committed)
 local-testing/
+
+# Test results (generated)
+test-results/
+
+# TODO files (local planning, not committed)
+TODO_*.md

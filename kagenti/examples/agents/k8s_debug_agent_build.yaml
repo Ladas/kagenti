@@ -1,0 +1,31 @@
+apiVersion: agent.kagenti.dev/v1alpha1
+kind: AgentBuild
+metadata:
+  labels:
+    app.kubernetes.io/created-by: e2e-test
+    app.kubernetes.io/name: kagenti-operator
+    kagenti.io/framework: AutoGen
+    kagenti.io/protocol: a2a
+    kagenti.io/type: agent
+  name: k8s-debug-agent-build
+  namespace: kagenti-agents
+spec:
+  mode: dev
+
+  source:
+    sourceRepository: "github.com/Ladas/agentic-control-plane.git"
+    sourceRevision: "orchestrator_agent_e2e_tests"
+    sourceSubfolder: "agents/k8s_debug_agent"
+    sourceCredentials:
+      name: github-token-secret
+
+  pipeline:
+    namespace: kagenti-system
+    parameters:
+    - name: SOURCE_REPO_SECRET
+      value: github-token-secret
+
+  buildOutput:
+    image: "k8s-debug-agent"
+    imageTag: "v0.0.4"
+    imageRegistry: "registry.cr-system.svc.cluster.local:5000"

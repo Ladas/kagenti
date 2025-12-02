@@ -1,0 +1,40 @@
+apiVersion: agent.kagenti.dev/v1alpha1
+kind: AgentBuild
+metadata:
+  labels:
+    app.kubernetes.io/created-by: e2e-test
+    app.kubernetes.io/name: kagenti-operator
+    kagenti.io/framework: AutoGen
+    kagenti.io/protocol: a2a
+    kagenti.io/type: agent
+  name: orchestrator-agent-build
+  namespace: kagenti-agents
+spec:
+  mode: dev
+
+  source:
+    # NOTE: This agent does not exist yet in agentic-control-plane.
+    # It needs to be created as a new agent that uses a2a-bridge MCP server
+    # to discover and delegate tasks to specialized agents.
+    #
+    # Proposed implementation path:
+    # 1. Create agents/orchestrator_agent/ in agentic-control-plane
+    # 2. Copy k8s_debug_agent structure (a2a_agent.py, observability.py, etc.)
+    # 3. Configure MCP_URL to point to a2a-bridge service
+    # 4. Implement routing logic based on agent skills from discover_agents()
+    sourceRepository: "github.com/Ladas/agentic-control-plane.git"
+    sourceRevision: "orchestrator_agent_e2e_tests"
+    sourceSubfolder: "agents/orchestrator_agent"
+    sourceCredentials:
+      name: github-token-secret
+
+  pipeline:
+    namespace: kagenti-system
+    parameters:
+    - name: SOURCE_REPO_SECRET
+      value: github-token-secret
+
+  buildOutput:
+    image: "orchestrator-agent"
+    imageTag: "v0.0.1"
+    imageRegistry: "registry.cr-system.svc.cluster.local:5000"

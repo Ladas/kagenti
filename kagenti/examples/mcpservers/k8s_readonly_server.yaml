@@ -1,0 +1,43 @@
+apiVersion: toolhive.stacklok.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: k8s-readonly-server
+  namespace: kagenti-agents
+  labels:
+    app.kubernetes.io/created-by: e2e-test
+    app.kubernetes.io/name: toolhive-operator
+    kagenti.io/framework: Python
+    kagenti.io/protocol: mcp
+    kagenti.io/type: tool
+  annotations:
+    description: "Kubernetes read-only MCP server for introspection"
+spec:
+  # Image built by AgentBuild
+  image: registry.cr-system.svc.cluster.local:5000/k8s-readonly-server:v0.0.1
+
+  # HTTP transport for MCP
+  transport: sse
+
+  # Target port the MCP container listens on
+  targetPort: 8080
+
+  # Environment variables
+  env:
+    - name: MCP_SERVER_PORT
+      value: "8080"
+    - name: ALLOWED_NAMESPACES
+      value: "default,team1,team2,kagenti-agents,kagenti-system"
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: "http://otel-collector.kagenti-system.svc.cluster.local:8335"
+
+  # Resource limits
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+  # Note: ServiceAccount will be patched in the deploy script since
+  # MCPServer CRD doesn't support serviceAccountName directly
