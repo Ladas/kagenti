@@ -28,26 +28,30 @@ kind get clusters 2>/dev/null
 ### Step 3: Route
 
 ```
-HyperShift kubeconfig found?
+Invoked with GitHub issue/PR URL?
     │
-    ├─ YES → Use `tdd:hypershift`
-    │        (full cluster access, real-time debugging)
+    ├─ YES → tdd:ci (Phase 0: create worktree from upstream/main first)
     │
-    └─ NO → Kind cluster running?
+    └─ NO → HyperShift kubeconfig found?
              │
-             ├─ YES → Use `tdd:kind`
-             │        (fast local iteration)
+             ├─ YES → Use `tdd:hypershift`
+             │        (full cluster access, real-time debugging)
              │
-             └─ NO → Is this a CI failure investigation?
+             └─ NO → Kind cluster running?
                       │
-                      ├─ YES → Use `tdd:ci`
-                      │        (commit, push, wait for CI)
+                      ├─ YES → Use `tdd:kind`
+                      │        (fast local iteration)
                       │
-                      └─ NO → Ask user:
-                               "No cluster available. Options:
-                                1. Create Kind cluster (auto-approved)
-                                2. Create HyperShift cluster (requires approval)
-                                3. Use CI-only workflow (tdd:ci)"
+                      └─ NO → Is this a CI failure investigation?
+                               │
+                               ├─ YES → Use `tdd:ci`
+                               │        (commit, push, wait for CI)
+                               │
+                               └─ NO → Ask user:
+                                        "No cluster available. Options:
+                                         1. Create Kind cluster (auto-approved)
+                                         2. Create HyperShift cluster (requires approval)
+                                         3. Use CI-only workflow (tdd:ci)"
 ```
 
 ## Available Skills

@@ -51,10 +51,13 @@ Only skill nodes are colored. Decision points, actions, and labels have no color
 
 ```mermaid
 flowchart TD
-    START([Task / Bug]) --> TDD{"/tdd"}
+    START([Task / Bug]) --> HASURL{"GH issue/PR URL?"}
+    HASURL -->|Yes| WORKTREE["git:worktree from upstream/main"]:::git
+    WORKTREE --> CI["tdd:ci"]:::tdd
+    HASURL -->|No| TDD{"/tdd"}
     TDD -->|HyperShift cluster found| HS["tdd:hypershift"]:::tdd
     TDD -->|Kind cluster found| KIND["tdd:kind"]:::tdd
-    TDD -->|No cluster| CI["tdd:ci"]:::tdd
+    TDD -->|No cluster| CI
     TDD -->|No cluster, ask user| CREATE{"Create cluster?"}
     CREATE -->|Kind auto-approved| KIND
     CREATE -->|HyperShift needs approval| HS

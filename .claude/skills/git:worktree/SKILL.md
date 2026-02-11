@@ -200,6 +200,7 @@ git worktree prune
 
 ## Related Skills
 
+- **tdd:ci**: CI-driven TDD workflow (auto-creates worktree from upstream/main for GH issues/PRs)
 - **kind:cluster**: Local Kind cluster management
 - **hypershift:cluster**: HyperShift cluster management
 - **kagenti:operator**: Deploy Kagenti platform
