@@ -18,6 +18,7 @@
 - [Implementation Details](#implementation-details)
 - [Files That Need to Change](#files-that-need-to-change)
 - [Phased Rollout](#phased-rollout)
+- [Phase 2: Agent Onboarding Workflow](#phase-2-agent-onboarding-workflow)
 - [Open Questions](#open-questions)
 
 ---
@@ -544,6 +545,341 @@ Replace per-namespace secret copies with a central secret store:
 
 ---
 
+## Phase 2: Agent Onboarding Workflow
+
+Once a team namespace exists, the next step is getting agents and tools deployed into it. Today this is manual: find agent code, figure out dependencies, build, deploy, configure routes, set up RBAC, verify traces. Phase 2 automates this entire onboarding pipeline.
+
+### Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                        Agent Onboarding Pipeline                                │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐     │
+│  │ 1. SCAN  │──►│ 2. PICK  │──►│ 3. BUILD │──►│4.PUBLISH │──►│ 5. TEST  │     │
+│  │          │   │          │   │  & SCAN   │   │          │   │          │     │
+│  │ GitHub   │   │ Select   │   │ Shipwright│   │ Route +  │   │ Chat +   │     │
+│  │ repos    │   │ agents + │   │ + Trivy   │   │ RBAC     │   │ Traces   │     │
+│  │ discover │   │ tools    │   │ + rating  │   │ setup    │   │ + OPA    │     │
+│  └──────────┘   └──────────┘   └──────────┘   └──────────┘   └──────────┘     │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Stage 1: Repository Scanning (Discover)
+
+User provides one or more GitHub URLs. The system scans each repository and discovers compatible agents and tools.
+
+**What the scanner looks for:**
+
+| Signal | Detected As | How |
+|--------|------------|-----|
+| `/.well-known/agent-card.json` in source | A2A Agent | File presence |
+| `Dockerfile` with `mcp` in dependencies | MCP Tool | Parse Dockerfile/requirements |
+| `pyproject.toml` with `a2a-sdk` dep | A2A Agent | Parse pyproject |
+| `pyproject.toml` with `mcp` dep | MCP Tool | Parse pyproject |
+| `agent-card.json` anywhere | A2A Agent | File search |
+| Multiple agents in subdirectories | Multi-agent repo | Directory scan |
+| `requirements.txt` / `pyproject.toml` | Dependencies | Parse for tool references |
+
+**Dependency detection:**
+
+The scanner also identifies cross-dependencies between agents and tools:
+
+```yaml
+# Example scan result
+scan_results:
+  - name: slack-researcher
+    type: agent
+    protocol: a2a
+    framework: AutoGen
+    source_dir: agents/slack-researcher/
+    depends_on:
+      - name: mcp-slack-tool
+        type: tool
+        protocol: mcp
+        reason: "MCP_URL env var references slack tool"
+      - name: mcp-weather-tool
+        type: tool
+        protocol: mcp
+        reason: "imports weather tool via MCP"
+
+  - name: mcp-slack-tool
+    type: tool
+    protocol: mcp
+    source_dir: tools/slack/
+    depends_on: []  # no dependencies
+
+  - name: mcp-weather-tool
+    type: tool
+    protocol: mcp
+    source_dir: tools/weather/
+    depends_on: []
+```
+
+**API:**
+
+```
+POST /api/v1/onboarding/scan
+Body: { "urls": ["https://github.com/kagenti/agent-examples"] }
+
+Response: {
+  "repositories": [{
+    "url": "https://github.com/kagenti/agent-examples",
+    "agents": [...],
+    "tools": [...],
+    "dependency_graph": { "slack-researcher": ["mcp-slack-tool", "mcp-weather-tool"] }
+  }]
+}
+```
+
+### Stage 2: Selection (Pick)
+
+User sees the scan results as a dependency graph and selects which agents and tools to import. The UI shows:
+
+- Agent name, framework, protocol
+- Required tools (auto-selected when agent is selected)
+- Optional tools
+- Estimated resource requirements
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Import Agents & Tools                                   │
+├─────────────────────────────────────────────────────────┤
+│                                                          │
+│  ☑ slack-researcher (A2A, AutoGen)                       │
+│    ├── ☑ mcp-slack-tool (MCP, required)                  │
+│    └── ☑ mcp-weather-tool (MCP, required)                │
+│                                                          │
+│  ☐ currency-converter (A2A, LangGraph)                   │
+│    └── (no dependencies)                                 │
+│                                                          │
+│  ☐ contact-extractor (A2A, Marvin)                       │
+│    └── (no dependencies)                                 │
+│                                                          │
+│  Target namespace: [data-science-team ▾]                 │
+│                                                          │
+│  [Import Selected]                                       │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Stage 3: Build & Scan
+
+For each selected agent/tool, the system:
+
+1. **Creates a Shipwright Build** from the source repository
+2. **Runs Trivy vulnerability scan** on the built image
+3. **Runs additional security checks:**
+   - License compliance scan
+   - Secret detection (prevent hardcoded secrets in images)
+   - Dependency audit (known CVE check)
+4. **Produces a security rating:**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Build & Scan Results                                    │
+├─────────────────────────────────────────────────────────┤
+│                                                          │
+│  slack-researcher                                        │
+│    Build:    ✅ Succeeded (45s)                           │
+│    Trivy:    ⚠️  2 MEDIUM, 0 HIGH, 0 CRITICAL            │
+│    Licenses: ✅ All Apache-2.0 / MIT                      │
+│    Secrets:  ✅ No hardcoded secrets                      │
+│    Rating:   ★★★★☆ (4/5)                                 │
+│                                                          │
+│  mcp-slack-tool                                          │
+│    Build:    ✅ Succeeded (32s)                           │
+│    Trivy:    ✅ 0 vulnerabilities                         │
+│    Licenses: ✅ All Apache-2.0                            │
+│    Secrets:  ✅ No hardcoded secrets                      │
+│    Rating:   ★★★★★ (5/5)                                 │
+│                                                          │
+│  mcp-weather-tool                                        │
+│    Build:    ✅ Succeeded (28s)                           │
+│    Trivy:    🔴 1 CRITICAL (CVE-2026-XXXXX)              │
+│    Rating:   ★★☆☆☆ (2/5) - CRITICAL vuln blocks publish │
+│                                                          │
+│  [Publish Approved ▾]  [Reject ▾]  [Rebuild ▾]          │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Implementation:**
+
+- Shipwright Builds already exist in the platform
+- Trivy scan runs as a Tekton Task or post-build Job
+- Results stored as annotations on the Build/Deployment
+- Rating algorithm configurable via ConfigMap
+
+### Stage 4: Publish
+
+After passing the scan, the user publishes agents/tools. This means:
+
+1. **Create public route** (HTTPRoute for Gateway API / OpenShift Route):
+   ```yaml
+   apiVersion: gateway.networking.k8s.io/v1
+   kind: HTTPRoute
+   metadata:
+     name: slack-researcher
+     namespace: data-science-team
+   spec:
+     parentRefs:
+     - name: kagenti-gateway
+       namespace: kagenti-system
+     hostnames:
+     - "slack-researcher.kagenti.example.com"
+     rules:
+     - backendRefs:
+       - name: slack-researcher
+         port: 8080
+   ```
+
+2. **Configure RBAC** (who can access this agent):
+   ```
+   ┌─────────────────────────────────────────────────────┐
+   │  Publish: slack-researcher                           │
+   ├─────────────────────────────────────────────────────┤
+   │                                                      │
+   │  Hostname: slack-researcher.kagenti.example.com      │
+   │                                                      │
+   │  Access Control:                                     │
+   │  ☑ team1 namespace (same team)                       │
+   │  ☑ team2 namespace                                   │
+   │  ☐ All namespaces (cluster-wide)                     │
+   │  ☐ External access (public internet)                 │
+   │                                                      │
+   │  Authentication:                                     │
+   │  ● Keycloak JWT required                             │
+   │  ○ mTLS only (Istio)                                 │
+   │  ○ No authentication                                 │
+   │                                                      │
+   │  [Publish Agent]                                     │
+   └─────────────────────────────────────────────────────┘
+   ```
+
+3. **Create Istio AuthorizationPolicy** based on access control choices:
+   ```yaml
+   apiVersion: security.istio.io/v1
+   kind: AuthorizationPolicy
+   metadata:
+     name: slack-researcher-access
+     namespace: data-science-team
+   spec:
+     rules:
+     - from:
+       - source:
+           namespaces: ["team1", "team2"]
+   ```
+
+4. **Register AgentCard** (if A2A agent) for discovery
+
+### Stage 5: Test & Verify
+
+After publishing, the user enters a test phase:
+
+1. **Conversation testing**: Chat with the agent via the UI to verify it works
+2. **Trace verification**: Check that the agent sends required traces
+
+**Trace compliance:**
+
+The platform defines required trace attributes for all agents:
+
+```yaml
+# OPA policy: required-traces-policy.rego
+package kagenti.traces
+
+required_attributes := {
+  "gen_ai.system",
+  "gen_ai.request.model",
+  "gen_ai.operation.name",
+  "service.name",
+  "service.namespace"
+}
+
+# Agent must emit at least one trace within 5 minutes of deployment
+violation[msg] {
+  agent := input.agents[_]
+  not agent.has_traces
+  msg := sprintf("Agent %s has not emitted any traces", [agent.name])
+}
+
+# Agent traces must include required GenAI semantic attributes
+violation[msg] {
+  trace := input.traces[_]
+  attr := required_attributes[_]
+  not trace.attributes[attr]
+  msg := sprintf("Trace missing required attribute: %s", [attr])
+}
+```
+
+**Trace compliance UI:**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Agent Health: slack-researcher                          │
+├─────────────────────────────────────────────────────────┤
+│                                                          │
+│  Trace Compliance:                                       │
+│    gen_ai.system:          ✅ "openai"                    │
+│    gen_ai.request.model:   ✅ "gpt-4o-mini"               │
+│    gen_ai.operation.name:  ✅ "chat"                       │
+│    service.name:           ✅ "slack-researcher"           │
+│    service.namespace:      ✅ "data-science-team"          │
+│                                                          │
+│  Status: ✅ COMPLIANT                                     │
+│                                                          │
+│  Trace count (last 1h): 47                               │
+│  Avg latency: 2.3s                                       │
+│  Error rate: 2.1%                                        │
+│                                                          │
+│  [View in Phoenix]  [View in Kiali]                      │
+└─────────────────────────────────────────────────────────┘
+```
+
+**OPA enforcement modes:**
+
+| Mode | Behavior |
+|------|----------|
+| `audit` | Log non-compliant agents, do not block |
+| `warn` | Show warning badge in UI, send alerts |
+| `enforce` | Disable agent route after grace period if non-compliant |
+
+The mode is configurable per namespace via annotation:
+```yaml
+annotations:
+  kagenti.io/trace-policy-mode: "warn"  # audit | warn | enforce
+```
+
+### Phase 2 Implementation Plan
+
+| Component | Repo | What Changes |
+|-----------|------|-------------|
+| GitHub scanner | kagenti/kagenti (backend) | New `/api/v1/onboarding/scan` endpoint |
+| Dependency graph | kagenti/kagenti (backend) | Parse agent/tool dependencies |
+| Import UI | kagenti/kagenti (ui-v2) | New onboarding wizard pages |
+| Trivy integration | kagenti/kagenti (charts) | Tekton Task for Trivy scan |
+| Security rating | kagenti/kagenti (backend) | Rating algorithm + API |
+| Route creation | kagenti/kagenti (backend) | HTTPRoute/Route creation API |
+| RBAC setup | kagenti/kagenti (backend) | AuthorizationPolicy creation API |
+| OPA policies | kagenti/kagenti (charts) | OPA/Gatekeeper policies for trace compliance |
+| Trace checker | kagenti/kagenti (backend) | Query Phoenix/OTEL for trace attributes |
+
+### Phase 2 Dependencies
+
+```
+Phase 1 (Namespace Provisioning)
+  └── Phase 2 (Agent Onboarding)
+       ├── Stage 1-2: Scan + Pick (backend + UI)
+       ├── Stage 3: Build + Scan (Shipwright + Trivy)
+       │    └── Depends on: Shipwright in target namespace
+       ├── Stage 4: Publish (routes + RBAC)
+       │    └── Depends on: Keycloak client in target namespace
+       └── Stage 5: Test + Verify (traces + OPA)
+            └── Depends on: OTEL collector, Phoenix, OPA/Gatekeeper
+```
+
+---
+
 ## Open Questions
 
 1. **Secret scope:** Should all namespaces share the same OpenAI/GitHub/Slack secrets, or should teams bring their own? (Relates to #400)
@@ -557,6 +893,16 @@ Replace per-namespace secret copies with a central secret store:
 5. **Operator repository:** The kagenti-operator lives in a separate repo. How do we coordinate the Helm chart changes (this repo) with the operator changes?
 
 6. **Migration:** How do we migrate existing `team1`/`team2` namespaces from Helm-managed to controller-managed without disruption?
+
+7. **Agent scanner depth:** Should the scanner clone repos fully (slow but accurate) or use GitHub API (fast but limited to file listing)?
+
+8. **Trivy policy:** What CVE severity level blocks publishing? CRITICAL only, or HIGH+CRITICAL?
+
+9. **OPA deployment:** Use OPA/Gatekeeper (cluster-wide) or a lightweight in-process policy engine in the backend?
+
+10. **Trace grace period:** How long after deployment before an agent is flagged for missing traces? 5 minutes? 1 hour?
+
+11. **Multi-repo agents:** How to handle agents that span multiple repositories (e.g., agent code in one repo, tools in another)?
 
 ---
 
