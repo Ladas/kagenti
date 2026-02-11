@@ -100,15 +100,25 @@ else
     log_info "MLflow not deployed, skipping pipeline readiness check"
 fi
 
+# Ensure test dependencies are installed
+if command -v uv &>/dev/null; then
+    # Check if test extras are installed by trying to import a test-only dependency
+    if ! uv run python -c "import mlflow" &>/dev/null; then
+        log_info "Test dependencies not installed. Running: uv sync --extra test"
+        (cd "$REPO_ROOT" && uv sync --extra test)
+    fi
+    PYTEST_CMD="uv run pytest"
+else
+    if ! python -c "import mlflow" &>/dev/null; then
+        log_error "Test dependencies missing. Run: uv sync --extra test"
+        exit 1
+    fi
+    PYTEST_CMD="pytest"
+fi
+
 # Support filtering tests via PYTEST_FILTER or PYTEST_ARGS
 # PYTEST_FILTER: pytest -k filter expression (e.g., "test_mlflow" or "TestGenAI")
 # PYTEST_ARGS: additional pytest arguments (e.g., "-x" for stop on first failure)
-# Use uv if available, fall back to plain pytest (CI installs deps via pip)
-if command -v uv &>/dev/null; then
-    PYTEST_CMD="uv run pytest"
-else
-    PYTEST_CMD="pytest"
-fi
 PYTEST_TARGETS="${PYTEST_TARGETS:-tests/e2e/common tests/e2e/kagenti_operator}"
 PYTEST_OPTS="-v --timeout=300 --tb=short --junit-xml=../test-results/e2e-results.xml"
 
