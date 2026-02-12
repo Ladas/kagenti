@@ -47,44 +47,51 @@ Only skill nodes are colored. Decision points, actions, and labels have no color
 | 🩷 Pink | GitHub |
 | 🔵 Indigo | HyperShift |
 
-### TDD Workflow
+### TDD Workflow (3 Entry Points)
 
 ```mermaid
 flowchart TD
-    START([Task / Bug]) --> HASURL{"GH issue/PR URL?"}
-    HASURL -->|Yes| WORKTREE["git:worktree from upstream/main"]:::git
-    WORKTREE --> CI["tdd:ci"]:::tdd
-    HASURL -->|No| TDD{"/tdd"}
-    TDD -->|HyperShift cluster found| HS["tdd:hypershift"]:::tdd
-    TDD -->|Kind cluster found| KIND["tdd:kind"]:::tdd
-    TDD -->|No cluster| CI
-    TDD -->|No cluster, ask user| CREATE{"Create cluster?"}
-    CREATE -->|Kind auto-approved| KIND
-    CREATE -->|HyperShift needs approval| HS
-    CREATE -->|No| CI
+    START(["/tdd"]) --> INPUT{"What input?"}
+    INPUT -->|GH Issue URL| ISSUE[Flow 1: Issue-First]
+    INPUT -->|GH PR URL| PR[Flow 2: PR-First]
+    INPUT -->|Local doc/task| LOCAL[Flow 3: Local-First]
+    INPUT -->|Nothing| DETECT{Detect cluster}
 
-    CI -->|"3+ failures"| ESCALATE{"Escalate?"}
-    ESCALATE -->|Yes| HS
-    ESCALATE -->|No| CI
+    ISSUE --> ANALYZE[Read issue + conversation]
+    ANALYZE --> CHECKPR{"Existing PR?"}
+    CHECKPR -->|Own PR| PR
+    CHECKPR -->|Other's PR| FORK{Fork or comment?}
+    CHECKPR -->|No PR| RESEARCH["rca + plan + post to issue"]:::rca
+    FORK --> RESEARCH
+    RESEARCH --> WORKTREE["git:worktree"]:::git
 
-    HS --> CODE[Write/Fix Code]
-    KIND --> CODE
-    CI --> CODE
+    PR --> RCACI["rca:ci"]:::rca
+    RCACI --> TDDCI["tdd:ci fix loop"]:::tdd
+    TDDCI -->|"3+ failures"| HS["tdd:hypershift"]:::tdd
+    TDDCI -->|CI green| REVIEWS[Handle PR reviews]
 
+    LOCAL --> KIND["tdd:kind"]:::tdd
+    KIND -->|Tests pass| MOVETOPR[Create issue + PR]
+    MOVETOPR --> PR
+
+    DETECT -->|HyperShift| HS
+    DETECT -->|Kind| KIND
+    DETECT -->|None| TDDCI
+
+    WORKTREE --> CODE[Write/Fix Code]
+    HS --> CODE
     CODE --> TESTLOOP["test:write + test:review"]:::test
-    TESTLOOP --> RUN{Run tests}
-    RUN -->|Kind| RUNKIND["test:run-kind"]:::test
-    RUN -->|HyperShift| RUNHS["test:run-hypershift"]:::test
-    RUNKIND -->|More failures than before| CODE
-    RUNHS -->|More failures than before| CODE
-    RUNKIND -->|"Fewer failures (progress!)"| COMMIT["git:commit + git:rebase"]:::git
-    RUNHS -->|"Fewer failures (progress!)"| COMMIT
-    COMMIT --> PUSH[Push to PR]
-    PUSH --> MONITOR["ci:monitoring"]:::ci
-    MONITOR -->|CI passes| DONE([Done])
+    TESTLOOP --> RUN["test:run-*"]:::test
+    RUN -->|Fail| CODE
+    RUN -->|Progress| COMMIT["git:commit + git:rebase"]:::git
+    COMMIT --> MONITOR["ci:monitoring"]:::ci
     MONITOR -->|CI fails| CODE
+    MONITOR -->|CI green| REVIEWS
+    REVIEWS -->|Changes needed| CODE
+    REVIEWS -->|Approved| DONE([Merged])
 
     classDef tdd fill:#4CAF50,stroke:#333,color:white
+    classDef rca fill:#FF5722,stroke:#333,color:white
     classDef test fill:#9C27B0,stroke:#333,color:white
     classDef git fill:#FF9800,stroke:#333,color:white
     classDef ci fill:#2196F3,stroke:#333,color:white
