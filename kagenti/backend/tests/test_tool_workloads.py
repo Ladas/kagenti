@@ -95,6 +95,22 @@ class TestToolDeploymentManifest:
         assert ports[0]["containerPort"] == 8000
         assert ports[0]["name"] == "http"
 
+    def test_deployment_multiple_container_ports(self, base_params):
+        """Verify all service ports appear as container ports when multiple are configured."""
+        base_params["service_ports"] = [
+            {"name": "http", "port": 8080, "targetPort": 8000},
+            {"name": "grpc", "port": 9090, "targetPort": 9000},
+        ]
+        manifest = _build_tool_deployment_manifest(**base_params)
+
+        containers = manifest["spec"]["template"]["spec"]["containers"]
+        ports = containers[0].get("ports", [])
+
+        assert len(ports) == 2
+        port_map = {p["name"]: p for p in ports}
+        assert port_map["http"]["containerPort"] == 8000
+        assert port_map["grpc"]["containerPort"] == 9000
+
     def test_deployment_with_image_pull_secret(self, base_params):
         """Verify imagePullSecrets is set when provided."""
         base_params["image_pull_secret"] = "my-registry-secret"
@@ -240,6 +256,22 @@ class TestToolStatefulSetManifest:
         storage = vct["spec"]["resources"]["requests"]["storage"]
         assert storage == "10Gi"
 
+    def test_statefulset_multiple_container_ports(self, base_params):
+        """Verify all service ports appear as container ports in StatefulSet."""
+        base_params["service_ports"] = [
+            {"name": "http", "port": 8080, "targetPort": 8000},
+            {"name": "grpc", "port": 9090, "targetPort": 9000},
+        ]
+        manifest = _build_tool_statefulset_manifest(**base_params)
+
+        containers = manifest["spec"]["template"]["spec"]["containers"]
+        ports = containers[0].get("ports", [])
+
+        assert len(ports) == 2
+        port_map = {p["name"]: p for p in ports}
+        assert port_map["http"]["containerPort"] == 8000
+        assert port_map["grpc"]["containerPort"] == 9000
+
 
 class TestToolServiceManifest:
     """Tests for _build_tool_service_manifest function."""
@@ -289,6 +321,22 @@ class TestToolServiceManifest:
         assert ports[0]["port"] == 8000
         assert ports[0]["targetPort"] == 8000
         assert ports[0]["name"] == "http"
+
+    def test_service_multiple_ports(self, base_params):
+        """Verify all service ports appear in Service spec when multiple are configured."""
+        base_params["service_ports"] = [
+            {"name": "http", "port": 8080, "targetPort": 8000, "protocol": "TCP"},
+            {"name": "grpc", "port": 9090, "targetPort": 9000, "protocol": "TCP"},
+        ]
+        manifest = _build_tool_service_manifest(**base_params)
+
+        ports = manifest["spec"]["ports"]
+        assert len(ports) == 2
+        port_map = {p["name"]: p for p in ports}
+        assert port_map["http"]["port"] == 8080
+        assert port_map["http"]["targetPort"] == 8000
+        assert port_map["grpc"]["port"] == 9090
+        assert port_map["grpc"]["targetPort"] == 9000
 
     def test_service_api_version_and_kind(self, base_params):
         """Verify correct apiVersion and kind."""
