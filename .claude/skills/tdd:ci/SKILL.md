@@ -11,6 +11,7 @@ description: CI-driven TDD workflow - commit, local checks, push, wait for CI, i
 - [When to Use](#when-to-use)
 - [The Workflow](#the-workflow)
 - [Phase 0: Worktree Setup](#phase-0-worktree-setup-when-linked-to-gh-issuepr)
+- [Phase 0b: Research & Plan](#phase-0b-research--plan-when-working-from-a-gh-issue)
 - [Phase 1: Brainstorm](#phase-1-brainstorm-new-features)
 - [Phase 2: Commit](#phase-2-commit)
 - [Phase 3: Local Checks](#phase-3-local-checks)
@@ -18,6 +19,7 @@ description: CI-driven TDD workflow - commit, local checks, push, wait for CI, i
 - [Phase 5: Wait for CI](#phase-5-wait-for-ci)
 - [Phase 6: Analyze Failures](#phase-6-analyze-failures)
 - [Phase 7: Fix and Iterate](#phase-7-fix-and-iterate)
+- [Phase 8: Handle PR Reviews](#phase-8-handle-pr-reviews-after-ci-passes)
 - [Escalation](#escalation-too-many-iterations)
 - [Task Tracking](#task-tracking)
 - [Anti-Patterns](#anti-patterns)
@@ -115,9 +117,54 @@ developed against the latest upstream code, not against a local feature branch.
 -> No existing worktree for #652
 -> Ask user: "Worktree name?" (default: fix-652)
 -> git worktree add .worktrees/fix-652 -b fix/keycloak-login-652 upstream/main
--> Investigate issue, implement fix in .worktrees/fix-652/
+-> Phase 0b: Research & plan (see below)
+-> Post findings to issue as comment
+-> Implement fix in .worktrees/fix-652/
 -> Commit, push, create PR against upstream/main
 ```
+
+## Phase 0b: Research & Plan (when working from a GH issue)
+
+**This phase applies to ALL /tdd skills when invoked with a GH issue URL.**
+Before writing any code, investigate the issue and present findings.
+
+### Steps
+
+1. **Read the issue** — understand what's reported, what's expected, reproduction steps
+
+2. **Research** — investigate the codebase for the root cause:
+   - Use `rca:ci` or `rca:kind` patterns to diagnose
+   - Search for the affected component, trace the code path
+   - Check if tests exist for this scenario
+
+3. **Plan the fix** — determine the approach:
+   - What files need to change
+   - What tests need to be written or updated
+   - Are there multiple valid approaches?
+
+4. **Post to the issue** — before coding, comment on the issue (requires approval):
+   ```
+   ## Investigation
+
+   **Root cause**: [what causes the issue]
+   **Affected files**: [list]
+
+   ## Proposed approach
+
+   [If clear approach]: "I plan to fix this by [description]. Will create a PR."
+
+   [If multiple options]:
+   "I see two approaches:
+    1. [approach A] — [tradeoff]
+    2. [approach B] — [tradeoff]
+    Which approach do you prefer?"
+
+   [If unclear]: "I have questions about this issue:
+    - [question 1]
+    - [question 2]"
+   ```
+
+5. **Wait for response** if questions were posted. Proceed with coding if the approach is clear.
 
 ## Phase 1: Brainstorm (New Features)
 
@@ -240,6 +287,70 @@ gh pr checks --watch
 ```
 
 **Repeat until all checks pass.**
+
+## Phase 8: Handle PR Reviews (after CI passes)
+
+When CI passes, check for review comments:
+
+```bash
+gh pr view <pr-number> --json reviews,comments --jq '.reviews[] | "\(.author.login): \(.state) - \(.body[:100])"'
+```
+
+```bash
+gh api repos/kagenti/kagenti/pulls/<pr-number>/comments --jq '.[] | "#\(.id) @\(.user.login) [\(.path):\(.line)] \(.body[:100])"'
+```
+
+### For each review comment, determine:
+
+```
+Review comment received
+    │
+    ├─ Clear actionable feedback → Implement as a NEW commit
+    │   (one commit per logical review item, not one per comment)
+    │
+    ├─ Ambiguous or unclear → Comment back on the PR asking
+    │   for clarification with specific questions
+    │
+    ├─ Disagree with suggestion → Comment back explaining why,
+    │   offer alternative approach with evidence
+    │
+    └─ Multiple options possible → Comment with options:
+        "I see two approaches for this:
+         1. [approach A] — [tradeoff]
+         2. [approach B] — [tradeoff]
+         Which do you prefer?"
+```
+
+### Commit review fixes
+
+Each logical review item gets its own commit:
+
+```bash
+git add <files>
+```
+
+```bash
+git commit -s -m "fix: address review - <what changed>"
+```
+
+After addressing all comments, push and comment on the PR:
+
+```bash
+git push
+```
+
+Then summarize what was addressed in a PR comment (requires approval):
+
+```
+Addressed review feedback:
+- commit abc123: [what was changed for comment X]
+- commit def456: [what was changed for comment Y]
+- Replied to comment Z with question about [topic]
+```
+
+### Then wait for CI again (back to Phase 5)
+
+After pushing review fixes, wait for CI to pass, then check for new review comments. Repeat until approved.
 
 ## Escalation: Too Many Iterations?
 
