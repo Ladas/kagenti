@@ -132,7 +132,7 @@ developed against the latest upstream code, not against a local feature branch.
 - Issues: `fix/<slug>-<number>` (e.g. `fix/keycloak-login-652`)
 - PRs: reuse the existing PR branch
 
-### Example
+### Example: Clear fix
 
 ```
 /tdd:ci https://github.com/kagenti/kagenti/issues/652
@@ -141,10 +141,51 @@ developed against the latest upstream code, not against a local feature branch.
 -> No existing worktree for #652
 -> Ask user: "Worktree name?" (default: fix-652)
 -> git worktree add .worktrees/fix-652 -b fix/keycloak-login-652 upstream/main
--> Phase 0b: Research & plan (see below)
--> Post findings to issue as comment
+-> Phase 0b: Research codebase, find root cause
+-> Post to issue: "Root cause is X. I'll fix by Y. Creating PR."
 -> Implement fix in .worktrees/fix-652/
 -> Commit, push, create PR against upstream/main
+```
+
+### Example: Unclear approach — post questions and wait
+
+```
+/tdd:ci https://github.com/kagenti/kagenti/issues/678
+
+-> Fetch upstream main, create worktree
+-> Phase 0b: Research reveals two possible causes
+-> Post to issue:
+     "## Investigation
+      I found two potential root causes:
+      1. Keycloak redirect URL mismatch — backend uses external URL for JWKS
+      2. Role mapping — admin role not mapped to kagenti-admin
+
+      ## Questions
+      - Should the backend use an in-cluster URL for JWKS, or fix DNS?
+      - Is the admin→kagenti-admin role mapping intentional?
+
+      Waiting for clarification before proceeding."
+-> STOP — wait for issue author to respond
+-> (Author replies: "Option 1 for JWKS, role mapping is a bug")
+-> Resume: implement fix based on response
+-> Commit, push, create PR
+```
+
+### Example: Multiple approaches — present options
+
+```
+/tdd:ci https://github.com/kagenti/kagenti/issues/700
+
+-> Research reveals the fix can go two ways
+-> Post to issue:
+     "## Proposed approaches
+      1. **Add KEYCLOAK_INTERNAL_URL env var** — explicit, works everywhere,
+         but adds configuration surface
+      2. **Auto-detect in-cluster via KUBERNETES_SERVICE_HOST** — zero config,
+         but implicit and harder to debug
+
+      Which approach do you prefer?"
+-> STOP — wait for response before coding
 ```
 
 ## Phase 0b: Research & Plan (when working from a GH issue)
