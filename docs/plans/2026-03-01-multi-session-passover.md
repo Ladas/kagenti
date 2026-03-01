@@ -5,23 +5,36 @@
 > **Active Sessions:** A, B, C, D, O
 > **Test Clusters:** sbox (dev), sbox1 (staging), sbox42 (integration — deploying)
 
-## ALERT: OpenAI Budget
+## ALERT: OpenAI Budget EXCEEDED
 
-OpenAI API usage may be near rate limits. If agent responses fail with 429 or timeout, wait and retry. All sessions using sandbox-legion (OpenAI gpt-4o-mini) are affected. sandbox-basic uses local LLM (unaffected).
+**Confirmed:** `insufficient_quota` — HTTP 429 on chat completions. Key is valid (models endpoint returns 200) but all chat/completion calls fail with:
+```json
+{"error": {"message": "You exceeded your current quota", "type": "insufficient_quota", "code": "insufficient_quota"}}
+```
 
-## Orchestrator Status (Session O)
+**Impact:** sandbox-legion, sandbox-hardened, sandbox-restricted ALL fail. sandbox-basic (local qwen2.5:3b) unaffected.
 
-**sbox42 cluster:** Created, Kagenti platform deployed, agents deploying
+**Action:** Check billing at https://platform.openai.com/account/billing/overview
+
+**TODO for Session B:** Agent must handle 429 `insufficient_quota` gracefully — return clear error message + auto-retry with backoff for transient 429s. Do NOT crash the SSE stream.
+
+## Orchestrator Status
+
+**Clusters:**
+- sbox: Active, 9/9 core tests passing
+- sbox42: Being deployed by Session O (another session)
+- sandbox42: Being created by this orchestrator session (in progress)
+
 **sbox core tests:** 9/9 passing (verified after all session pushes)
 **No file conflicts detected** between sessions
 
 ### Session Activity (latest)
 | Session | Last Commit | What |
 |---------|------------|------|
-| A | `bb2f73e6` (53m ago) | flush tool call events during streaming |
-| B | No commits yet | — |
-| C | `907fac72` (66m ago) | Integration CRD + UI pages (7 commits) |
-| D | `c34f4c29` (26m ago) | demo realm users + show-services --reveal |
+| A | `bb2f73e6` | flush tool call events during streaming |
+| B | No commits visible | may be working locally |
+| C | `907fac72` + 6 more | Integration CRD + UI pages (7 commits) |
+| D | `c34f4c29` | demo realm users + show-services --reveal |
 
 ## Architecture Reference
 
