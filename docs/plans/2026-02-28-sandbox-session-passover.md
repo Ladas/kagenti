@@ -7,16 +7,25 @@
 - Tests: 12/12 Playwright + 4/4 variant tests passing
 - Agent rebuild: Pending (Shipwright build for new serializer)
 
-## Critical Blocker: Agent Serializer Not Deployed
+## Critical Blocker 1: Agent DB Connection Broken (Istio + asyncpg)
 
-The LangGraphSerializer (`event_serializer.py`) is committed and pushed to `agent-examples` repo but the Shipwright build keeps failing:
-- `sandbox-agent-rebuild-wscqc`: BuildRunTimeout
-- `sandbox-agent-rebuild-tcgm5`: TaskRunImagePullFailed (Red Hat Registry 500)
-- `sandbox-agent-rebuild-f88j9`: Currently running
+**Root cause**: Istio ambient ztunnel intercepts TCP connections between pods. The `asyncpg` PostgreSQL driver's connection protocol gets corrupted by ztunnel's mTLS insertion. This causes `ConnectionDoesNotExistError: connection was closed in the middle of operation`.
 
-**Impact**: Without the serializer deployed, the agent still emits old-format Python repr, tool calls are partially parsed by regex, and the full LLM thinking + tool call chain is not visible.
+**Tried and failed**:
+- `PeerAuthentication: PERMISSIVE` on postgres pod
+- `ambient.istio.io/redirection: disabled` annotation on postgres StatefulSet
+- `ssl=False` parameter in asyncpg.connect()
+- Direct pod IP connection
 
-**Fix**: Wait for build to succeed, then restart all sandbox deployments.
+**Likely fix**: The agent needs to also have `ambient.istio.io/redirection: disabled`, or use `psycopg` instead of `asyncpg` (psycopg handles the Istio mTLS differently). OR: the postgres should be in a different namespace that's not in the mesh.
+
+**Impact**: Agent can't persist to PostgreSQL → SSE streams break → "Connection error" in UI
+
+## Critical Blocker 2: Agent Serializer Not In Image
+
+The `event_serializer.py` file is in the git repo but doesn't end up in the container image after Shipwright build. Investigation showed the file exists on disk but isn't installed by `uv sync`. Workaround: ConfigMap mount of both `event_serializer.py` and `agent.py` into the running pods.
+
+**Fix**: Either fix the Dockerfile/pyproject.toml to include the file, or use the ConfigMap mount approach permanently.
 
 ## What's Working (Verified with Tests)
 
