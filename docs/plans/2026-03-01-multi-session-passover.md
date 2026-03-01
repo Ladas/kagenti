@@ -3,7 +3,25 @@
 > **Date:** 2026-03-01
 > **Orchestrator:** Session O (this document's owner)
 > **Active Sessions:** A, B, C, D, O
-> **Test Clusters:** sbox (dev), sbox1 (staging), sbox42 (integration)
+> **Test Clusters:** sbox (dev), sbox1 (staging), sbox42 (integration — deploying)
+
+## ALERT: OpenAI Budget
+
+OpenAI API usage may be near rate limits. If agent responses fail with 429 or timeout, wait and retry. All sessions using sandbox-legion (OpenAI gpt-4o-mini) are affected. sandbox-basic uses local LLM (unaffected).
+
+## Orchestrator Status (Session O)
+
+**sbox42 cluster:** Created, Kagenti platform deployed, agents deploying
+**sbox core tests:** 9/9 passing (verified after all session pushes)
+**No file conflicts detected** between sessions
+
+### Session Activity (latest)
+| Session | Last Commit | What |
+|---------|------------|------|
+| A | `bb2f73e6` (53m ago) | flush tool call events during streaming |
+| B | No commits yet | — |
+| C | `907fac72` (66m ago) | Integration CRD + UI pages (7 commits) |
+| D | `c34f4c29` (26m ago) | demo realm users + show-services --reveal |
 
 ## Architecture Reference
 
@@ -19,7 +37,8 @@ Previous research (reference only): [2026-02-23-sandbox-agent-research.md](2026-
 ### Session O — Orchestrator (sbox42 cluster)
 
 **Role:** Test coordination, integration testing, conflict resolution
-**Cluster:** sbox42 (to be created)
+**Cluster:** sbox42 (creating — ETA ~10 min)
+**Claude Session:** Session O active as of 2026-03-01
 **Responsibilities:**
 - Run full E2E test suite after each session pushes
 - Detect conflicts between sessions
@@ -111,6 +130,18 @@ Use /tdd:hypershift for iteration. 12/12 Playwright tests must stay green.
 3. P1: Wizard deploy triggers Shipwright Build (not just Deployment)
 4. P1: Agent deploy script improvements (faster rebuilds)
 5. P2: Source build from git URL (wizard end-to-end)
+
+**Session Active:** YES (started 2026-03-01T12:04Z)
+
+**Status / Findings:**
+- P0 RESOLVED: `event_serializer.py` IS in the agent image — verified via `kubectl exec`. Import works, produces correct JSON (`{"type": "tool_call", ...}`). All 4 agent variants have it.
+- P0 IN PROGRESS: Shipwright builds are intermittently failing due to **transient Red Hat registry errors** (HTTP 500 from `registry.redhat.io` for buildah image pulls). Not a code issue. Latest successful agent build: 2026-02-28T18:43Z.
+- Backend build 37 and UI build 39 triggered for latest commits (HEAD: `88f3f1fc`).
+- sandbox-agent uses in-memory checkpointer (by design — stateless variant)
+- sandbox-legion has CHECKPOINT_DB_URL + TASK_STORE_DB_URL configured correctly
+- sandbox-hardened/basic/restricted all share sandbox-agent:v0.0.1 image, all have serializer
+
+**Correction for Session A:** The serializer IS deployed. If tool call rendering isn't working, the issue is NOT the agent image — it's likely the streaming flush logic in the frontend or the backend event parsing. The agent correctly emits `{"type": "tool_call", "tools": [...]}` format.
 
 **Startup:**
 ```bash
@@ -254,7 +285,7 @@ KAGENTI_UI_URL=https://kagenti-ui-kagenti-system.apps.kagenti-team-sbox42.octo-e
 | B (Builds) | 3 | 0/3 (wizard walkthrough) | Not run |
 | C (HITL+Integrations) | 6+new | 3/6 | 2026-03-01 — integrations hub merged, writing UI tests |
 | D (Multi-user) | 0 | N/A | Not started |
-| O (Integration) | ALL | Pending sbox42 | Not started |
+| O (Integration) | ALL | Pending sbox42 | Cluster creating... |
 
 ---
 
@@ -264,7 +295,10 @@ KAGENTI_UI_URL=https://kagenti-ui-kagenti-system.apps.kagenti-team-sbox42.octo-e
 
 | Requester | Target Session | File | Change Needed | Status |
 |-----------|---------------|------|---------------|--------|
-| — | — | — | — | — |
+| O (conflict scan) | ALL | `api.ts`, `App.tsx`, `main.py` | **UNOWNED** — these shared files will cause merge conflicts. Assign ownership or use merge-order rules. | NEW |
+| O (conflict scan) | A, B | `SandboxCreatePage.tsx` | **UNOWNED** — sits at Session A/B boundary. Assign to one session. | NEW |
+| O (conflict scan) | B | `kubernetes.py` | Multi-author (Smola + Dettori). Session A HITL work touched this B-exclusive file in commit ae3e26fa. | WATCH |
+| O (conflict scan) | D | `kagenti/auth/` | 3 authors (Dettori, Rubambiza, Smola). Session D should coordinate before modifying. | WATCH |
 
 ---
 
