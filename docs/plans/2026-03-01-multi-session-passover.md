@@ -5,6 +5,27 @@
 > **Active Sessions:** A, B, C, D, O
 > **Test Clusters:** sbox (dev), sbox1 (staging), sbox42 (integration — deploying)
 
+## CRITICAL: Passwords Changed on ALL Clusters
+
+**ALL Keycloak passwords have been rotated to random values.**
+Old `admin/admin` NO LONGER WORKS on any cluster.
+
+**To get new credentials:**
+```bash
+KUBECONFIG=~/clusters/hcp/kagenti-team-<YOUR_CLUSTER>/auth/kubeconfig \
+  .worktrees/sandbox-agent/.github/scripts/local-setup/show-services.sh --reveal
+```
+
+**For Playwright tests:** The test runner (92-run-ui-tests.sh) auto-reads from K8s secrets.
+For manual runs, set env vars:
+```bash
+export KEYCLOAK_PASSWORD=$(kubectl -n keycloak get secret kagenti-test-users -o jsonpath='{.data.admin-password}' | base64 -d)
+```
+
+**Session assignments remain the same:** A/B/D→sbox, C→sbox42, O→sandbox42
+
+---
+
 ## ALERT: OpenAI Budget EXCEEDED
 
 **Confirmed:** `insufficient_quota` — HTTP 429 on chat completions. Key is valid (models endpoint returns 200) but all chat/completion calls fail with:
@@ -18,15 +39,37 @@
 
 **TODO for Session B:** Agent must handle 429 `insufficient_quota` gracefully — return clear error message + auto-retry with backoff for transient 429s. Do NOT crash the SSE stream.
 
-## Orchestrator Status
+## Orchestrator Status (Updated 2026-03-01 15:00)
 
-**Clusters:**
-- sbox: Active, 9/9 core tests passing
-- sbox42: Being deployed by Session O (another session)
-- sandbox42: Being created by this orchestrator session (in progress)
+### Cluster Matrix
+| Cluster | Model | Agents | Tests | UI | Password |
+|---------|-------|--------|-------|-----|----------|
+| **sbox** | DeepSeek R1 14B | 5 running | **12/12 PASS** | Latest | Random (use `show-services.sh --reveal`) |
+| **sbox42** | Mistral Small 24B | 5 running | **13/13 PASS** | Latest | Random (use `show-services.sh --reveal`) |
+| **sandbox42** | Mistral Small 24B | 1 (legion) | 0/8 (needs UI rebuild) | Old (v0.5.0) | Random (use `show-services.sh --reveal`) |
 
-**sbox core tests:** 9/9 passing (verified after all session pushes)
-**No file conflicts detected** between sessions
+### Session → Cluster Assignments
+| Session | Cluster | Why |
+|---------|---------|-----|
+| **A** (Core Platform) | **sbox** | Has all 5 variants, DeepSeek, full history |
+| **B** (Source Builds) | **sbox** | Shares agents with A, needs Shipwright builds |
+| **C** (HITL & Integrations) | **sbox42** | Clean cluster, Mistral, no conflicts with A/B |
+| **D** (Keycloak) | **sbox** | Needs Keycloak access in keycloak namespace |
+| **O** (Orchestrator) | **sandbox42** | Integration testing after fixing UI build |
+
+### Passwords Changed
+All clusters now use **random Keycloak admin passwords** (not admin/admin).
+Read credentials: `KUBECONFIG=~/clusters/hcp/kagenti-team-<cluster>/auth/kubeconfig .github/scripts/local-setup/show-services.sh --reveal`
+
+Demo realm users (dev-user, ns-admin) still use username=password (by design for test users).
+
+### Latest Test Results
+| Cluster | Suite | Result |
+|---------|-------|--------|
+| sbox | Full sandbox (12 tests) | **12/12 PASS** |
+| sbox | Weather agent (3 tests) | **3/3 PASS** |
+| sbox42 | Full sandbox (13 tests) | **13/13 PASS** |
+| sandbox42 | Session + identity | **0/8 FAIL** (old UI, no Sessions page) |
 
 ### Session Activity (latest)
 | Session | Last Commit | What |
@@ -202,19 +245,26 @@ Session A owns sandbox.py and SandboxPage.tsx — do NOT touch those files.
 - `kagenti/tests/e2e/common/test_sandbox_legion.py` — EXCLUSIVE
 - `docs/plans/2026-02-27-session-orchestration-design.md` — EXCLUSIVE
 
-**Additional File Ownership (Integrations Hub):**
+**Additional File Ownership (Integrations Hub + Sessions):**
 - `kagenti/ui-v2/src/pages/IntegrationsPage.tsx` — EXCLUSIVE
 - `kagenti/ui-v2/e2e/integrations.spec.ts` — EXCLUSIVE
+- `kagenti/ui-v2/e2e/sessions-table.spec.ts` — EXCLUSIVE
 - `kagenti/backend/app/routers/integrations.py` — EXCLUSIVE
 - `charts/kagenti/templates/integration-crd.yaml` — EXCLUSIVE
 
 **Priority Tasks:**
-1. P1: Wire HITL approve/deny to LangGraph graph resume (BLOCKED — needs Session A DB fix)
-2. P1: Sessions table with passover chain column
-3. P1: Integrations Hub UI tests (TDD — Playwright)
-4. P2: Sub-agent delegation design + populate parent_context_id
-5. P2: Passover chain API endpoint
-6. P3: Automated passover (context_monitor node)
+1. ~~P1: Integrations Hub UI (7 commits)~~ ✅ DONE — merged into feat/sandbox-agent
+2. ~~P1: Integrations Hub Playwright tests~~ ✅ DONE — 24/24 passing
+3. ~~P1: Sessions table with passover chain column~~ ✅ DONE — SessionsTablePage + 20/20 tests
+4. ~~P2: Sub-agent delegation design~~ ✅ DONE — docs/plans/2026-03-01-sub-agent-delegation-design.md
+5. ~~P2: Webhook receiver endpoint~~ ✅ DONE — POST /integrations/:ns/:name/webhook
+6. P1: Wire HITL approve/deny to LangGraph graph resume (Session A DB fix done, models available)
+7. P2: Implement delegate tool in agent code
+8. P2: Passover chain API endpoint (requires Session A — cross-session TODO posted)
+9. P3: Automated passover (context_monitor node)
+
+**Test Results (local):** 44/44 Playwright tests passing (24 integrations + 20 sessions)
+**sbox42 Results:** 7/7 passing (sandbox-chat-identity 3/3, session-ownership 4/4)
 
 **Startup:**
 ```bash
@@ -313,9 +363,28 @@ KAGENTI_UI_URL=https://kagenti-ui-kagenti-system.apps.kagenti-team-sbox42.octo-e
 |---------|-------|---------|----------|
 | A (Core) | 12 | 12/12 | 2026-02-28 |
 | B (Builds) | 3 | 0/3 (wizard walkthrough) | Not run |
-| C (HITL+Integrations) | 6+24 | 3/6 + 24/24 integrations | 2026-03-01 — integrations hub 24/24 Playwright tests passing, HITL blocked on A |
+| C (HITL+Integrations) | 7+44 | 7/7 sbox42 + 44/44 local | 2026-03-01 — integrations 24/24, sessions 20/20, webhook endpoint, delegation design |
 | D (Multi-user) | 0 | N/A | Not started |
-| O (Integration) | ALL | BLOCKED | 2026-03-01 13:35 — sbox42 cluster UP, Kagenti installed, weather agents deployed. **BLOCKED** by `postgres-sessions-0` pod `CreateContainerConfigError`: `postgres:16-alpine` runs as root but OpenShift requires `runAsNonRoot`. Sandbox agents never deployed. No tests run yet. |
+| O (Integration) | 31 | **23/31** (5 fail, 3 skip) | 2026-03-01 14:45 — sbox42 full suite |
+
+### Session O — Integration Test Detail (sbox42, 2026-03-01 14:45)
+
+| Spec file | Total | Pass | Fail | Skip | Owner |
+|---|---|---|---|---|---|
+| `sandbox-sessions.spec.ts` | 6 | 6 | 0 | 0 | A |
+| `sandbox-variants.spec.ts` | 4 | 4 | 0 | 0 | A |
+| `sandbox-chat-identity.spec.ts` | 3 | 3 | 0 | 0 | C |
+| `session-ownership.spec.ts` | 4 | 4 | 0 | 0 | C |
+| `agent-chat-identity.spec.ts` | 10 | 6 | **4** | 0 | D |
+| `sandbox-rendering.spec.ts` | 4 | 0 | **1** | 3 | A |
+
+**Failure root causes:**
+- **agent-chat-identity (4 failures):** Multi-user login timeout — `loginAs(dev-user/ns-admin)` hangs on Keycloak redirect >30s. Admin single-context login works (6/10 pass). Likely Keycloak users not created on sbox42 — Session D needs to create `dev-user` and `ns-admin` users here.
+- **sandbox-rendering (1 fail + 3 skip):** Tool call steps not rendered (`Tool Call steps found: 0`). UI rendering bug — streaming response arrives but ToolCallStep components produce no DOM. Serial mode skips remaining 3 tests. Session A / B coordination needed.
+
+**Deploy workarounds applied on sbox42 (NOT in repo):**
+1. `postgres-sessions`: replaced `bitnami/postgresql:16` (tag not found) with `registry.redhat.io/rhel9/postgresql-16:latest` (non-root, OpenShift-compatible)
+2. All sandbox agent deployments: patched `securityContext.runAsUser: 1001` to fix TOFU `PermissionError` on OpenShift-assigned UID
 
 ---
 
@@ -333,6 +402,10 @@ KAGENTI_UI_URL=https://kagenti-ui-kagenti-system.apps.kagenti-team-sbox42.octo-e
 | O (sbox42 deploy) | B | `postgres-sessions.yaml` | ~~**P0 BLOCKER**: postgres:16-alpine runs as root~~ ✅ FIXED — switched to `bitnami/postgresql:16` (UID 1001). Commit `2417c723`. | DONE |
 | B | A | `sandbox.py` | FYI: asyncpg fix is `TASK_STORE_DB_URL` driver scheme (`postgresql+psycopg://`), not ssl or retry. Checkpointer already uses psycopg via `AsyncPostgresSaver`. | INFO |
 | C | A | `sandbox.py` | Add `GET /sessions/{context_id}/chain` endpoint — traverse `parent_context_id` and `passover_from`/`passover_to` in metadata to return full session lineage. See `docs/plans/2026-03-01-sub-agent-delegation-design.md` Phase 2. | NEW |
+| O (sbox42 test) | B | `postgres-sessions.yaml` | **P0**: `bitnami/postgresql:16` tag does NOT exist on Docker Hub (manifest unknown). sbox42 workaround: `registry.redhat.io/rhel9/postgresql-16:latest`. Fix: use valid tag (e.g. `bitnami/postgresql:16.6.0`) or switch to RHEL image. | NEW |
+| O (sbox42 test) | B | agent Dockerfile / `agent.py` | **P0**: TOFU hash write `PermissionError: /app/.tofu-hashes.json` on OCP with arbitrary UID. `/app` owned by 1001 but OCP assigns different UID. Fix: `chmod g+w /app` in Dockerfile OR write to `/tmp`. sbox42 workaround: `runAsUser: 1001` patch. | NEW |
+| O (sbox42 test) | D | `agent-chat-identity.spec.ts` | 4 multi-user tests fail on sbox42 — Keycloak `dev-user`/`ns-admin` not created. Session D must run user creation on sbox42 or tests need cluster-agnostic setup. | NEW |
+| O (sbox42 test) | A | `sandbox-rendering.spec.ts` | Tool call steps not rendered (`found: 0`). Agent streams response but ToolCallStep components produce no DOM elements. Frontend rendering bug. | NEW |
 
 ---
 
