@@ -140,28 +140,38 @@ Use /tdd:hypershift for iteration. 12/12 Playwright tests must stay green.
 - `kagenti/ui-v2/e2e/sandbox-create-walkthrough.spec.ts` — EXCLUSIVE
 
 **Priority Tasks:**
-1. ~~P0: Fix event_serializer.py not included in agent image~~ ✅ VERIFIED — serializer IS in image, import works, produces correct JSON
-2. ~~P0: Fix Shipwright build timeouts/failures~~ ✅ RESOLVED — transient Red Hat registry 500s; backend-37 + ui-39 completed
-3. ~~P0: Fix Istio+asyncpg DB connection in agents~~ ✅ FIXED — switched `asyncpg` to `psycopg` driver (2e2590b, 6d5aee22)
-4. P1: Wizard deploy triggers Shipwright Build (not just Deployment)
-5. P1: Create deployment manifests for hardened/basic/restricted variants
-6. P2: Source build from git URL (wizard end-to-end)
+1. ~~P0: Fix event_serializer.py not included in agent image~~ ✅ VERIFIED — serializer IS in image
+2. ~~P0: Fix Shipwright build timeouts/failures~~ ✅ RESOLVED — backend-37 + ui-39 completed
+3. ~~P0: Fix Istio+asyncpg DB connection~~ ✅ FIXED — switched `asyncpg` to `psycopg` driver
+4. ~~P0: Fix postgres-sessions non-root~~ ✅ FIXED — switched to `bitnami/postgresql:16`
+5. ~~P1: Create deployment manifests for all variants~~ ✅ DONE — 5 variants with services
+6. ~~P1: Graceful 429/quota error handling~~ ✅ DONE — retry + clean error via SSE
+7. P1: Wizard deploy triggers Shipwright Build (not just Deployment)
+8. P2: Source build from git URL (wizard end-to-end)
 
 **Session Active:** YES (started 2026-03-01T12:04Z)
 
 **Commits:**
 ```
-2e2590b fix(sandbox): switch TaskStore from asyncpg to psycopg driver  (agent-examples repo)
-6d5aee22 fix(deploy): switch sandbox-legion TaskStore URL from asyncpg to psycopg  (kagenti repo)
+# agent-examples repo:
+2e2590b fix(sandbox): switch TaskStore from asyncpg to psycopg driver
+048f0de fix(sandbox): handle LLM 429/quota errors gracefully in SSE stream
+
+# kagenti repo:
+6d5aee22 fix(deploy): switch sandbox-legion TaskStore URL from asyncpg to psycopg
+2417c723 fix(deploy): switch postgres-sessions to bitnami/postgresql for OCP
+2bf50b24 feat(deploy): add deployment manifests for all sandbox agent variants
 ```
 
 **Status / Findings:**
-- ✅ Serializer IS in all agent images. Produces `{"type": "tool_call", ...}` format correctly.
-- ✅ Backend build 37 + UI build 39 completed, rollout done — latest code deployed.
-- ✅ DB connection fixed: `postgresql+asyncpg://` → `postgresql+psycopg://`. Istio ztunnel corrupts asyncpg binary protocol; psycopg text protocol works fine. All 4 persistent variants patched.
-- ✅ sandbox-legion confirmed healthy with PostgreSQL — no more `ConnectionDoesNotExistError`.
-
-**Correction for Session A:** The serializer IS deployed. Tool call rendering issue is frontend streaming, not agent image. The asyncpg fix is the driver scheme in `TASK_STORE_DB_URL`, not ssl or connection args.
+- ✅ Serializer in all agent images, produces correct JSON format
+- ✅ Backend + UI builds completed, latest code deployed
+- ✅ DB connection fixed: `postgresql+psycopg://` works with Istio ztunnel
+- ✅ postgres-sessions: bitnami/postgresql:16 (UID 1001) for OCP compatibility
+- ✅ All 5 variant manifests created with services
+- ✅ 429 handling: quota exhaustion → clean error, transient → retry 3x with backoff
+- ⏳ Agent image rebuild in progress (BuildRun sandbox-agent-rebuild-rwjw6)
+- ⚠️ E2E test blocked by OpenAI quota exhaustion
 
 **Startup:**
 ```bash
@@ -322,6 +332,7 @@ KAGENTI_UI_URL=https://kagenti-ui-kagenti-system.apps.kagenti-team-sbox42.octo-e
 | O (conflict scan) | D | `kagenti/auth/` | 3 authors (Dettori, Rubambiza, Smola). Session D should coordinate before modifying. | WATCH |
 | O (sbox42 deploy) | B | `postgres-sessions.yaml` | ~~**P0 BLOCKER**: postgres:16-alpine runs as root~~ ✅ FIXED — switched to `bitnami/postgresql:16` (UID 1001). Commit `2417c723`. | DONE |
 | B | A | `sandbox.py` | FYI: asyncpg fix is `TASK_STORE_DB_URL` driver scheme (`postgresql+psycopg://`), not ssl or retry. Checkpointer already uses psycopg via `AsyncPostgresSaver`. | INFO |
+| C | A | `sandbox.py` | Add `GET /sessions/{context_id}/chain` endpoint — traverse `parent_context_id` and `passover_from`/`passover_to` in metadata to return full session lineage. See `docs/plans/2026-03-01-sub-agent-delegation-design.md` Phase 2. | NEW |
 
 ---
 
