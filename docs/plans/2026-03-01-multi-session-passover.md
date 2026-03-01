@@ -102,11 +102,13 @@ export KUBECONFIG=~/clusters/hcp/kagenti-team-sbox42/auth/kubeconfig
 - `kagenti/ui-v2/e2e/sandbox-variants.spec.ts` — EXCLUSIVE
 
 **Priority Tasks:**
-1. P0: Fix Istio + asyncpg DB connection (try psycopg driver or mesh exclusion)
-2. P0: Fix agent serializer in image (Dockerfile/pyproject.toml)
-3. P1: Tool call rendering during streaming + in loaded history
-4. P1: Session name matching content (title propagation)
-5. P2: Streaming tool call events -> ToolCallStep messages
+1. ~~P0: Fix Istio + asyncpg DB connection~~ ✅ DONE — ssl=False, retry, eviction (5f7596d6)
+2. P0: Fix agent serializer in image (Dockerfile/pyproject.toml) — Session B
+3. ~~P1: Tool call rendering during streaming + in loaded history~~ ✅ DONE — parseGraphEvent regex fallback + immediate flush (bb2f73e6)
+4. ~~P1: Session name matching content~~ ✅ DONE — metadata merge across task rows (cf026bb9)
+5. ~~P2: Streaming tool call events -> ToolCallStep messages~~ ✅ DONE (merged with #3)
+
+**All Session A P0/P1 tasks complete.** Backend deployed to sbox. Awaiting Session O integration test.
 
 **Startup:**
 ```bash
@@ -138,23 +140,28 @@ Use /tdd:hypershift for iteration. 12/12 Playwright tests must stay green.
 - `kagenti/ui-v2/e2e/sandbox-create-walkthrough.spec.ts` — EXCLUSIVE
 
 **Priority Tasks:**
-1. P0: Fix event_serializer.py not included in agent image (pyproject.toml or Dockerfile)
-2. P0: Fix Shipwright build timeouts/failures
-3. P1: Wizard deploy triggers Shipwright Build (not just Deployment)
-4. P1: Agent deploy script improvements (faster rebuilds)
-5. P2: Source build from git URL (wizard end-to-end)
+1. ~~P0: Fix event_serializer.py not included in agent image~~ ✅ VERIFIED — serializer IS in image, import works, produces correct JSON
+2. ~~P0: Fix Shipwright build timeouts/failures~~ ✅ RESOLVED — transient Red Hat registry 500s; backend-37 + ui-39 completed
+3. ~~P0: Fix Istio+asyncpg DB connection in agents~~ ✅ FIXED — switched `asyncpg` to `psycopg` driver (2e2590b, 6d5aee22)
+4. P1: Wizard deploy triggers Shipwright Build (not just Deployment)
+5. P1: Create deployment manifests for hardened/basic/restricted variants
+6. P2: Source build from git URL (wizard end-to-end)
 
 **Session Active:** YES (started 2026-03-01T12:04Z)
 
-**Status / Findings:**
-- P0 RESOLVED: `event_serializer.py` IS in the agent image — verified via `kubectl exec`. Import works, produces correct JSON (`{"type": "tool_call", ...}`). All 4 agent variants have it.
-- P0 IN PROGRESS: Shipwright builds are intermittently failing due to **transient Red Hat registry errors** (HTTP 500 from `registry.redhat.io` for buildah image pulls). Not a code issue. Latest successful agent build: 2026-02-28T18:43Z.
-- Backend build 37 and UI build 39 triggered for latest commits (HEAD: `88f3f1fc`).
-- sandbox-agent uses in-memory checkpointer (by design — stateless variant)
-- sandbox-legion has CHECKPOINT_DB_URL + TASK_STORE_DB_URL configured correctly
-- sandbox-hardened/basic/restricted all share sandbox-agent:v0.0.1 image, all have serializer
+**Commits:**
+```
+2e2590b fix(sandbox): switch TaskStore from asyncpg to psycopg driver  (agent-examples repo)
+6d5aee22 fix(deploy): switch sandbox-legion TaskStore URL from asyncpg to psycopg  (kagenti repo)
+```
 
-**Correction for Session A:** The serializer IS deployed. If tool call rendering isn't working, the issue is NOT the agent image — it's likely the streaming flush logic in the frontend or the backend event parsing. The agent correctly emits `{"type": "tool_call", "tools": [...]}` format.
+**Status / Findings:**
+- ✅ Serializer IS in all agent images. Produces `{"type": "tool_call", ...}` format correctly.
+- ✅ Backend build 37 + UI build 39 completed, rollout done — latest code deployed.
+- ✅ DB connection fixed: `postgresql+asyncpg://` → `postgresql+psycopg://`. Istio ztunnel corrupts asyncpg binary protocol; psycopg text protocol works fine. All 4 persistent variants patched.
+- ✅ sandbox-legion confirmed healthy with PostgreSQL — no more `ConnectionDoesNotExistError`.
+
+**Correction for Session A:** The serializer IS deployed. Tool call rendering issue is frontend streaming, not agent image. The asyncpg fix is the driver scheme in `TASK_STORE_DB_URL`, not ssl or connection args.
 
 **Startup:**
 ```bash
@@ -298,7 +305,7 @@ KAGENTI_UI_URL=https://kagenti-ui-kagenti-system.apps.kagenti-team-sbox42.octo-e
 | B (Builds) | 3 | 0/3 (wizard walkthrough) | Not run |
 | C (HITL+Integrations) | 6+24 | 3/6 + 24/24 integrations | 2026-03-01 — integrations hub 24/24 Playwright tests passing, HITL blocked on A |
 | D (Multi-user) | 0 | N/A | Not started |
-| O (Integration) | ALL | Pending sbox42 | Cluster creating... |
+| O (Integration) | ALL | BLOCKED | 2026-03-01 13:35 — sbox42 cluster UP, Kagenti installed, weather agents deployed. **BLOCKED** by `postgres-sessions-0` pod `CreateContainerConfigError`: `postgres:16-alpine` runs as root but OpenShift requires `runAsNonRoot`. Sandbox agents never deployed. No tests run yet. |
 
 ---
 
@@ -310,15 +317,19 @@ KAGENTI_UI_URL=https://kagenti-ui-kagenti-system.apps.kagenti-team-sbox42.octo-e
 |-----------|---------------|------|---------------|--------|
 | O (conflict scan) | ALL | `api.ts`, `App.tsx`, `main.py` | **UNOWNED** — these shared files will cause merge conflicts. Assign ownership or use merge-order rules. | NEW — Session C added integrations to all 3 files (cherry-picked + conflict resolved into sandbox-agent) |
 | O (conflict scan) | A, B | `SandboxCreatePage.tsx` | **UNOWNED** — sits at Session A/B boundary. Assign to one session. | NEW |
+| A | O | `deployments/sandbox/postgres-sessions.yaml` | Re-apply on sbox42: image fixed from `postgres:16-alpine` to `bitnami/postgresql:16` (non-root) in 886a3cf4. Run: `kubectl apply -f .worktrees/sandbox-agent/deployments/sandbox/postgres-sessions.yaml` then `kubectl rollout restart sts/postgres-sessions -n team1` | READY |
 | O (conflict scan) | B | `kubernetes.py` | Multi-author (Smola + Dettori). Session A HITL work touched this B-exclusive file in commit ae3e26fa. | WATCH |
 | O (conflict scan) | D | `kagenti/auth/` | 3 authors (Dettori, Rubambiza, Smola). Session D should coordinate before modifying. | WATCH |
+| O (sbox42 deploy) | B | `postgres-sessions.yaml` | ~~**P0 BLOCKER**: postgres:16-alpine runs as root~~ ✅ FIXED — switched to `bitnami/postgresql:16` (UID 1001). Commit `2417c723`. | DONE |
+| B | A | `sandbox.py` | FYI: asyncpg fix is `TASK_STORE_DB_URL` driver scheme (`postgresql+psycopg://`), not ssl or retry. Checkpointer already uses psycopg via `AsyncPostgresSaver`. | INFO |
 
 ---
 
 ## Priority Order
 
-1. **Session B**: Fix source builds -> deploy serializer -> unblocks tool call rendering
-2. **Session A**: Fix Istio+asyncpg DB connection, then tool call step flushing
+1. ~~**Session B**: Fix source builds -> deploy serializer~~ ✅ ALL P0s DONE
+2. **Session A**: Tool call rendering (streaming flush), session name propagation
 3. **Session C**: Wire HITL approve/deny to graph.resume()
 4. **Session D**: Create Keycloak test users, multi-user Playwright tests
-5. **Session O**: Deploy sbox42, run full integration suite
+5. **Session O**: Pull latest (`2417c723`), re-deploy sbox42 with bitnami postgres, run integration suite
+6. **Session B**: Create deployment manifests for hardened/basic/restricted variants
