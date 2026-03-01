@@ -141,12 +141,19 @@ Session A owns sandbox.py and SandboxPage.tsx — do NOT touch those files.
 - `kagenti/tests/e2e/common/test_sandbox_legion.py` — EXCLUSIVE
 - `docs/plans/2026-02-27-session-orchestration-design.md` — EXCLUSIVE
 
+**Additional File Ownership (Integrations Hub):**
+- `kagenti/ui-v2/src/pages/IntegrationsPage.tsx` — EXCLUSIVE
+- `kagenti/ui-v2/e2e/integrations.spec.ts` — EXCLUSIVE
+- `kagenti/backend/app/routers/integrations.py` — EXCLUSIVE
+- `charts/kagenti/templates/integration-crd.yaml` — EXCLUSIVE
+
 **Priority Tasks:**
-1. P1: Wire HITL approve/deny to LangGraph graph resume
+1. P1: Wire HITL approve/deny to LangGraph graph resume (BLOCKED — needs Session A DB fix)
 2. P1: Sessions table with passover chain column
-3. P2: Sub-agent delegation (populate parent_context_id)
-4. P2: Passover chain API endpoint
-5. P3: Automated passover (context_monitor node)
+3. P1: Integrations Hub UI tests (TDD — Playwright)
+4. P2: Sub-agent delegation design + populate parent_context_id
+5. P2: Passover chain API endpoint
+6. P3: Automated passover (context_monitor node)
 
 **Startup:**
 ```bash
@@ -245,7 +252,7 @@ KAGENTI_UI_URL=https://kagenti-ui-kagenti-system.apps.kagenti-team-sbox42.octo-e
 |---------|-------|---------|----------|
 | A (Core) | 12 | 12/12 | 2026-02-28 |
 | B (Builds) | 3 | 0/3 (wizard walkthrough) | Not run |
-| C (HITL) | 6 | 3/6 | 2026-02-28 |
+| C (HITL+Integrations) | 6+new | 3/6 | 2026-03-01 — integrations hub merged, writing UI tests |
 | D (Multi-user) | 0 | N/A | Not started |
 | O (Integration) | ALL | Pending sbox42 | Not started |
 
