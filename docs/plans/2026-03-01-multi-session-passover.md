@@ -283,7 +283,7 @@ KAGENTI_UI_URL=https://kagenti-ui-kagenti-system.apps.kagenti-team-sbox42.octo-e
 |---------|-------|---------|----------|
 | A (Core) | 12 | 12/12 | 2026-02-28 |
 | B (Builds) | 3 | 0/3 (wizard walkthrough) | Not run |
-| C (HITL+Integrations) | 6+new | 3/6 | 2026-03-01 — integrations hub merged, writing UI tests |
+| C (HITL+Integrations) | 6+24 | 3/6 + 24/24 integrations | 2026-03-01 — integrations hub 24/24 Playwright tests passing, HITL blocked on A |
 | D (Multi-user) | 0 | N/A | Not started |
 | O (Integration) | ALL | Pending sbox42 | Cluster creating... |
 
@@ -295,7 +295,7 @@ KAGENTI_UI_URL=https://kagenti-ui-kagenti-system.apps.kagenti-team-sbox42.octo-e
 
 | Requester | Target Session | File | Change Needed | Status |
 |-----------|---------------|------|---------------|--------|
-| O (conflict scan) | ALL | `api.ts`, `App.tsx`, `main.py` | **UNOWNED** — these shared files will cause merge conflicts. Assign ownership or use merge-order rules. | NEW |
+| O (conflict scan) | ALL | `api.ts`, `App.tsx`, `main.py` | **UNOWNED** — these shared files will cause merge conflicts. Assign ownership or use merge-order rules. | NEW — Session C added integrations to all 3 files (cherry-picked + conflict resolved into sandbox-agent) |
 | O (conflict scan) | A, B | `SandboxCreatePage.tsx` | **UNOWNED** — sits at Session A/B boundary. Assign to one session. | NEW |
 | O (conflict scan) | B | `kubernetes.py` | Multi-author (Smola + Dettori). Session A HITL work touched this B-exclusive file in commit ae3e26fa. | WATCH |
 | O (conflict scan) | D | `kagenti/auth/` | 3 authors (Dettori, Rubambiza, Smola). Session D should coordinate before modifying. | WATCH |
