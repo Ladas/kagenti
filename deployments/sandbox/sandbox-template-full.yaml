@@ -74,11 +74,12 @@ spec:
           echo "Installing dependencies..."
           pip install --target=/tmp/pip-packages --quiet --no-cache-dir litellm nono-py 2>/dev/null
           export PYTHONPATH=/tmp/pip-packages:$PYTHONPATH
-          echo "Sandbox agent ready"
+          echo "Sandbox agent starting"
           echo "  Workspace: /workspace/repo"
           echo "  Model: ${LLM_MODEL:-not set}"
           echo "  Skills: $(ls /workspace/repo/.claude/skills/ 2>/dev/null | wc -l) loaded"
-          sleep 36000
+          echo "  Landlock: nono-py $(python3 -c 'import nono_py; print("available")' 2>/dev/null || echo 'not available')"
+          exec python3 nono_launcher.py python3 agent_server.py
         ports:
         - containerPort: 8080
           protocol: TCP

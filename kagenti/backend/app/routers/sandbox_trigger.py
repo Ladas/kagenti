@@ -20,7 +20,7 @@ _sandbox_dir = Path(__file__).parents[4] / "deployments" / "sandbox"
 if str(_sandbox_dir) not in sys.path:
     sys.path.insert(0, str(_sandbox_dir))
 
-from triggers import SandboxTrigger
+from triggers import SandboxTrigger  # pylint: disable=wrong-import-position
 
 logger = logging.getLogger(__name__)
 

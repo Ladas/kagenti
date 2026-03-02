@@ -68,15 +68,47 @@ def apply_sandbox():
     return True
 
 
+def verify_tofu():
+    """Run TOFU verification before applying sandbox. Returns (ok, message)."""
+    workspace = os.environ.get("WORKSPACE_DIR", "/workspace")
+    namespace = os.environ.get("SANDBOX_NAMESPACE", "team1")
+
+    try:
+        from tofu import TofuVerifier
+
+        verifier = TofuVerifier(workspace, namespace=namespace)
+        ok, msg = verifier.verify_or_initialize()
+        print(f"TOFU: {msg}", file=sys.stderr)
+        return ok, msg
+    except ImportError:
+        print("TOFU: skipped (tofu module not available)", file=sys.stderr)
+        return True, "skipped"
+    except Exception as e:
+        print(f"TOFU: error ({e}) — continuing", file=sys.stderr)
+        return True, f"error: {e}"
+
+
 def main():
-    # Apply Landlock sandbox
+    # Step 1: TOFU verification (before Landlock locks filesystem)
+    tofu_ok, tofu_msg = verify_tofu()
+    if not tofu_ok:
+        print(f"FATAL: TOFU verification failed — {tofu_msg}", file=sys.stderr)
+        if os.environ.get("TOFU_ENFORCE", "").lower() == "true":
+            sys.exit(1)
+        else:
+            print(
+                "WARNING: TOFU_ENFORCE not set, continuing despite failure",
+                file=sys.stderr,
+            )
+
+    # Step 2: Apply Landlock sandbox (IRREVERSIBLE)
     sandboxed = apply_sandbox()
     if sandboxed:
         print("nono Landlock sandbox applied (irreversible)", file=sys.stderr)
     else:
         print("Running without Landlock (nono-py not available)", file=sys.stderr)
 
-    # Spawn the agent command
+    # Step 3: Spawn the agent command
     if len(sys.argv) > 1:
         cmd = sys.argv[1:]
     else:

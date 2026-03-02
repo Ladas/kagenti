@@ -413,8 +413,10 @@ KAGENTI_UI_URL=https://kagenti-ui-kagenti-system.apps.kagenti-team-sbox42.octo-e
 
 ### Session F — Composable Sandbox Security (no cluster)
 
+**Claude Session:** `00b11888-7e0c-4fb4-bb39-32ea32e09b64`
 **Role:** Design + implement composable sandbox security model, Landlock wiring, SandboxClaim integration
 **Cluster:** None (unit tests only — no cluster needed)
+**Session Active:** YES (started 2026-03-01)
 **File Ownership:**
 - `deployments/sandbox/sandbox_profile.py` — EXCLUSIVE (NEW, created by F)
 - `deployments/sandbox/tests/` — EXCLUSIVE (NEW, created by F)
@@ -443,6 +445,43 @@ KAGENTI_UI_URL=https://kagenti-ui-kagenti-system.apps.kagenti-team-sbox42.octo-e
 - P2: Wire `tofu.py` into `nono_launcher.py` startup sequence
 
 **Note:** Session B has `deployments/sandbox/` as EXCLUSIVE. Session F added NEW files there (sandbox_profile.py, tests/) and copied modules from the worktree. No existing Session B files were modified. Coordinate with Session B if conflicts arise.
+
+---
+
+### Session E — Legion Sub-Agent Spawning (no cluster required for in-process mode)
+
+**Claude Session ID:** `fab47f37`
+**Role:** Legion multi-mode delegation, session graph DAG visualization, delegation E2E tests
+**Cluster:** kagenti-hypershift-custom-otel (for cluster-mode tests), local for in-process mode
+**Session Active:** YES (started 2026-03-02)
+**File Ownership:**
+- `kagenti/ui-v2/src/pages/SessionGraphPage.tsx` — EXCLUSIVE (NEW, created by E)
+- `kagenti/ui-v2/e2e/sandbox-graph.spec.ts` — EXCLUSIVE (NEW, created by E)
+- `kagenti/ui-v2/e2e/sandbox-delegation.spec.ts` — EXCLUSIVE (NEW, created by E)
+- `kagenti/backend/app/routers/chat.py` — graph endpoint only (lines 544-612, `get_session_graph`)
+- `deployments/sandbox/subagents.py` — EXCLUSIVE (NEW, planned)
+- `kagenti/tests/e2e/common/test_sandbox_delegation.py` — EXCLUSIVE (NEW, planned)
+- `docs/plans/2026-03-01-sandbox-platform-design.md` Sections 9-10 — EXCLUSIVE (Session E additions)
+
+**Completed Tasks:**
+1. ✅ Design: 4-mode delegation model (in-process, shared-pvc, isolated, sidecar) — Section 9
+2. ✅ Design: Session Graph DAG page with React Flow + dagre — Section 10
+3. ✅ Playwright tests: 10 graph tests (sandbox-graph.spec.ts), 6 delegation tests (sandbox-delegation.spec.ts)
+4. ✅ SessionGraphPage.tsx — React Flow + dagre layout, custom nodes/edges, legend
+5. ✅ Backend: `GET /chat/{ns}/sessions/{ctx}/graph` endpoint with mock data
+6. ✅ Route: `/sandbox/graph` in App.tsx, "Session Graph" nav item in AppLayout.tsx
+7. ✅ Dependencies: @xyflow/react@12.10.1, dagre@0.8.5 installed
+
+**Test Results:** 9/10 graph tests passing locally (1 edge visibility flake), 0/6 delegation tests (need SandboxPage delegation event handler)
+
+**Remaining Tasks:**
+- P1: Fix remaining graph test flake (edge count assertion)
+- P1: Add delegation event types to SandboxPage streaming parser
+- P1: Implement `in-process` delegation in agent code (subagents.py)
+- P2: Backend: wire graph endpoint to real task metadata
+- P2: `shared-pvc` delegation pod spawning
+- P3: `isolated` delegation via SandboxClaim
+- P3: `sidecar` delegation
 
 ---
 
