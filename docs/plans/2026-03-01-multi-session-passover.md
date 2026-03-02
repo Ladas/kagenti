@@ -4,7 +4,7 @@
 > **Main Coordinator:** `9468f782` — runs tests, monitors sessions, updates this doc
 > **Main Coordinator:** Session `9468f782` — runs cross-cluster tests, monitors all sessions, updates doc
 > **Orchestrator:** Session O (spawns sub-sessions)
-> **Active Sessions:** A, B, C, D, E, F, O
+> **Active Sessions:** A, B, C, D, E, F, H, O
 > **Test Clusters:** sbox (dev), sbox1 (staging), sbox42 (integration)
 
 ## CRITICAL: Passwords Changed on ALL Clusters
@@ -41,14 +41,14 @@ export KEYCLOAK_PASSWORD=$(kubectl -n keycloak get secret kagenti-test-users -o 
 
 **TODO for Session B:** Agent must handle 429 `insufficient_quota` gracefully — return clear error message + auto-retry with backoff for transient 429s. Do NOT crash the SSE stream.
 
-## Orchestrator Status (Updated 2026-03-01 15:00)
+## Orchestrator Status (Updated 2026-03-02 12:00)
 
 ### Cluster Matrix
 | Cluster | Model | Agents | Tests | UI | Password |
 |---------|-------|--------|-------|-----|----------|
 | **sbox** | DeepSeek R1 14B | 5 running | **12/12 PASS** | Latest | Random (use `show-services.sh --reveal`) |
 | **sbox42** | Mistral Small 24B | 5 running | **13/13 PASS** | Latest | Random (use `show-services.sh --reveal`) |
-| **sandbox42** | Mistral Small 24B | 1 (legion) | 0/8 (needs UI rebuild) | Old (v0.5.0) | Random (use `show-services.sh --reveal`) |
+| **sandbox42** | Mistral Small 24B | 5 running | **17/31** (11 fail, 3 skip) | Latest (rebuilt) | admin/admin (test-users created) |
 
 ### Session → Cluster Assignments
 | Session | Cluster | Why |
@@ -71,7 +71,9 @@ Demo realm users (dev-user, ns-admin) still use username=password (by design for
 | sbox | Full sandbox (12 tests) | **12/12 PASS** |
 | sbox | Weather agent (3 tests) | **3/3 PASS** |
 | sbox42 | Full sandbox (13 tests) | **13/13 PASS** |
-| sandbox42 | Session + identity | **0/8 FAIL** (old UI, no Sessions page) |
+| sandbox42 | Core sandbox (13 tests) | **13/13 PASS** (post-Landlock deploy) |
+| sandbox42 | Full suite (31 tests) | **17/31** (11 fail, 3 skip) |
+| sandbox42 | Landlock verification | **6/6 PASS** on RHCOS kernel 5.14 |
 
 ### Session Activity (latest)
 | Session | Last Commit | What |
@@ -95,8 +97,9 @@ Previous research (reference only): [2026-02-23-sandbox-agent-research.md](2026-
 ### Session O — Orchestrator (sbox42 cluster)
 
 **Role:** Test coordination, integration testing, conflict resolution
-**Cluster:** sbox42 (creating — ETA ~10 min)
-**Claude Session:** Session O active as of 2026-03-01
+**Cluster:** sandbox42 (UP — 2 nodes, Mistral Small 24B, 5 agents running)
+**Claude Session ID:** `25db5acf`
+**Worktree:** `.worktrees/sandbox-agent` (read-only, for deploy scripts and test specs)
 **Responsibilities:**
 - Run full E2E test suite after each session pushes
 - Detect conflicts between sessions
@@ -369,26 +372,31 @@ KAGENTI_UI_URL=https://kagenti-ui-kagenti-system.apps.kagenti-team-sbox42.octo-e
 | B (Builds) | 3 | 0/3 (wizard walkthrough) | Not run |
 | C (HITL+Integrations) | 7+44 | 7/7 sbox42 + 44/44 local | 2026-03-01 — integrations 24/24, sessions 20/20, webhook endpoint, delegation design |
 | D (Multi-user) | 0 | N/A | Not started |
-| O (Integration) | 31 | **23/31** (5 fail, 3 skip) | 2026-03-01 14:45 — sbox42 full suite |
+| H (File Browser) | 6 | 6/6 (mocked API) | 2026-03-02 — all local, no cluster needed |
+| O (Integration) | 31 | **17/31** (11 fail, 3 skip) | 2026-03-02 11:30 — sandbox42 full suite |
 
-### Session O — Integration Test Detail (sbox42, 2026-03-01 14:45)
+### Session O — Integration Test Detail (sandbox42, 2026-03-02 11:30)
 
 | Spec file | Total | Pass | Fail | Skip | Owner |
 |---|---|---|---|---|---|
-| `sandbox-sessions.spec.ts` | 6 | 6 | 0 | 0 | A |
-| `sandbox-variants.spec.ts` | 4 | 4 | 0 | 0 | A |
-| `sandbox-chat-identity.spec.ts` | 3 | 3 | 0 | 0 | C |
-| `session-ownership.spec.ts` | 4 | 4 | 0 | 0 | C |
-| `agent-chat-identity.spec.ts` | 10 | 6 | **4** | 0 | D |
+| `sandbox-sessions.spec.ts` | 6 | **6** | 0 | 0 | A |
+| `sandbox-variants.spec.ts` | 4 | **4** | 0 | 0 | A |
+| `sandbox-chat-identity.spec.ts` | 3 | **3** | 0 | 0 | C |
+| `agent-chat-identity.spec.ts` | 10 | 4 | **6** | 0 | D |
+| `session-ownership.spec.ts` | 4 | 0 | **4** | 0 | C |
 | `sandbox-rendering.spec.ts` | 4 | 0 | **1** | 3 | A |
 
 **Failure root causes:**
-- **agent-chat-identity (4 failures):** Multi-user login timeout — `loginAs(dev-user/ns-admin)` hangs on Keycloak redirect >30s. Admin single-context login works (6/10 pass). Likely Keycloak users not created on sbox42 — Session D needs to create `dev-user` and `ns-admin` users here.
-- **sandbox-rendering (1 fail + 3 skip):** Tool call steps not rendered (`Tool Call steps found: 0`). UI rendering bug — streaming response arrives but ToolCallStep components produce no DOM. Serial mode skips remaining 3 tests. Session A / B coordination needed.
+- **agent-chat-identity (6 fail):** Weather agent card never becomes visible (30s timeout at line 91). Tests expect `weather-service` agent in AgentChat page but it may not be registered or the selector changed.
+- **session-ownership (4 fail):** Sessions table page never renders (15s timeout). The SessionsTablePage component exists but may need route registration or new UI build.
+- **sandbox-rendering (1 fail + 3 skip):** Tool call steps not rendered (`found: 0`). Known frontend rendering issue — agent streams response but ToolCallStep components produce no DOM elements.
 
-**Deploy workarounds applied on sbox42 (NOT in repo):**
-1. `postgres-sessions`: replaced `bitnami/postgresql:16` (tag not found) with `registry.redhat.io/rhel9/postgresql-16:latest` (non-root, OpenShift-compatible)
-2. All sandbox agent deployments: patched `securityContext.runAsUser: 1001` to fix TOFU `PermissionError` on OpenShift-assigned UID
+**Deploy workarounds applied on sandbox42 (NOT in repo):**
+1. `postgres-sessions`: used `registry.redhat.io/rhel9/postgresql-16:latest` (bitnami tag broken)
+2. All sandbox agents: patched `runAsUser: 1001` for TOFU write permission
+3. All sandbox agents: patched Mistral model env vars (`LLM_API_BASE`, `LLM_MODEL`)
+4. Keycloak: ran `create-test-users.sh` to create admin/dev-user/ns-admin users
+5. UI: rebuilt from source (build-2) after DNS resolution failure on build-1
 
 ---
 
@@ -410,6 +418,8 @@ KAGENTI_UI_URL=https://kagenti-ui-kagenti-system.apps.kagenti-team-sbox42.octo-e
 | O (sbox42 test) | B | agent Dockerfile / `agent.py` | **P0**: TOFU hash write `PermissionError: /app/.tofu-hashes.json` on OCP with arbitrary UID. `/app` owned by 1001 but OCP assigns different UID. Fix: `chmod g+w /app` in Dockerfile OR write to `/tmp`. sbox42 workaround: `runAsUser: 1001` patch. | NEW |
 | O (sbox42 test) | D | `agent-chat-identity.spec.ts` | 4 multi-user tests fail on sbox42 — Keycloak `dev-user`/`ns-admin` not created. Session D must run user creation on sbox42 or tests need cluster-agnostic setup. | NEW |
 | O (sbox42 test) | A | `sandbox-rendering.spec.ts` | Tool call steps not rendered (`found: 0`). Agent streams response but ToolCallStep components produce no DOM elements. Frontend rendering bug. | NEW |
+| H | A | `SandboxPage.tsx` | Add file path link renderer: when agent mentions file paths in chat (e.g. `/workspace/src/main.py`), make them clickable links to `/sandbox/files/:namespace/:agentName?path=<filepath>`. | NEW |
+| H | O | `App.tsx`, `AppLayout.tsx`, `api.ts`, `main.py` | Session H added additive changes: new route, nav item, API service, router registration. Verify no conflicts with other sessions during integration. | NEW |
 
 ---
 
@@ -499,6 +509,46 @@ ceb51a5b feat(sandbox): wire TOFU + Landlock + repo_manager, register Session F
 - P2: `shared-pvc` delegation pod spawning
 - P3: `isolated` delegation via SandboxClaim
 - P3: `sidecar` delegation
+
+---
+
+### Session H — Sandbox File Browser (no cluster required)
+
+**Claude Session ID:** (this session — Session H)
+**Role:** File browser UI for exploring sandbox agent workspaces
+**Cluster:** None (mocked API for E2E tests — uses live cluster for integration)
+**Session Active:** YES (started 2026-03-02)
+**File Ownership:**
+- `kagenti/backend/app/routers/sandbox_files.py` — EXCLUSIVE (NEW, created by H)
+- `kagenti/ui-v2/src/components/FileBrowser.tsx` — EXCLUSIVE (NEW, created by H)
+- `kagenti/ui-v2/src/components/FilePreview.tsx` — EXCLUSIVE (NEW, created by H)
+- `kagenti/ui-v2/e2e/sandbox-file-browser.spec.ts` — EXCLUSIVE (NEW, created by H)
+
+**Completed Tasks:**
+1. ✅ Backend: `sandbox_files.py` router — pod exec via `kubernetes.stream` for file listing/reading
+2. ✅ Frontend: `FilePreview.tsx` — markdown + mermaid diagram rendering + CodeBlock for code
+3. ✅ Frontend: `FileBrowser.tsx` — split-pane TreeView + breadcrumbs + FilePreview
+4. ✅ Route: `/sandbox/files/:namespace/:agentName` in App.tsx, "Files" nav item in AppLayout.tsx
+5. ✅ Types: `FileEntry`, `DirectoryListing`, `FileContent` + `sandboxFileService` in api.ts
+6. ✅ Dependency: mermaid installed for diagram rendering
+7. ✅ E2E: 6 Playwright tests (sandbox-file-browser.spec.ts) with mocked API
+
+**Commits:**
+```
+60957ff1 feat(sandbox): add file browser backend endpoint (Session H)
+374badbe fix(sandbox): align FileEntry/FileContent models with spec (Session H)
+ec4f371d feat(ui): add mermaid dependency for diagram rendering (Session H)
+c3720f76 feat(ui): add file browser types and API service (Session H)
+03f5f389 feat(ui): FilePreview and FileBrowser components (Session H)
+f670e59f feat(ui): add file browser route and Files nav item (Session H)
+f3b3b876 test(ui): add file browser Playwright E2E tests (Session H)
+```
+
+**Remaining Tasks:**
+- P2: Integration test on live cluster (needs agent pod running)
+- P3: Link from session chat to file browser (cross-session — see TODO below)
+
+**Shared file changes:** Session H added additive changes to App.tsx (new route), AppLayout.tsx (new nav item), api.ts (new service + types), types/index.ts (new types), main.py (new router). These are all additive — should not conflict.
 
 ---
 
