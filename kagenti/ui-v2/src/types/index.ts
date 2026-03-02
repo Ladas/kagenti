@@ -316,3 +316,27 @@ export interface User {
   email?: string;
   roles?: string[];
 }
+
+// File browser types (Session H)
+export interface FileEntry {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  size: number;
+  modified: string;
+  permissions: string;
+}
+
+export interface DirectoryListing {
+  path: string;
+  entries: FileEntry[];
+}
+
+export interface FileContent {
+  path: string;
+  content: string;
+  size: number;
+  modified: string;
+  type: string;
+  encoding: string;
+}

@@ -11,6 +11,8 @@ import type {
   Tool,
   ToolDetail,
   ApiListResponse,
+  DirectoryListing,
+  FileContent,
 } from '@/types';
 
 // API configuration
@@ -647,6 +649,33 @@ export const sessionGraphService = {
   ): Promise<SessionGraphData> {
     return apiFetch(
       `/chat/${encodeURIComponent(namespace)}/sessions/${encodeURIComponent(contextId)}/graph`
+    );
+  },
+};
+
+/**
+ * Sandbox file browser service (Session H)
+ */
+export const sandboxFileService = {
+  async listDirectory(
+    namespace: string,
+    agentName: string,
+    path: string = '/workspace'
+  ): Promise<DirectoryListing> {
+    const params = new URLSearchParams({ path });
+    return apiFetch<DirectoryListing>(
+      `/sandbox/${encodeURIComponent(namespace)}/files/${encodeURIComponent(agentName)}?${params}`
+    );
+  },
+
+  async getFileContent(
+    namespace: string,
+    agentName: string,
+    path: string
+  ): Promise<FileContent> {
+    const params = new URLSearchParams({ path });
+    return apiFetch<FileContent>(
+      `/sandbox/${encodeURIComponent(namespace)}/files/${encodeURIComponent(agentName)}?${params}`
     );
   },
 };
