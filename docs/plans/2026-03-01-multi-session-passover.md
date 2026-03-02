@@ -2,7 +2,7 @@
 
 > **Date:** 2026-03-01
 > **Orchestrator:** Session O (this document's owner)
-> **Active Sessions:** A, B, C, D, F, O
+> **Active Sessions:** A, B, C, D, E, F, O
 > **Test Clusters:** sbox (dev), sbox1 (staging), sbox42 (integration — deploying)
 
 ## CRITICAL: Passwords Changed on ALL Clusters
@@ -172,6 +172,7 @@ Use /tdd:hypershift for iteration. 12/12 Playwright tests must stay green.
 
 ### Session B — Source Builds & Agent Image (sbox cluster)
 
+**Claude Session ID:** (this session — Session B)
 **Role:** Fix Shipwright builds, agent image packaging, deploy scripts
 **Cluster:** sbox (shared with A, different namespace resources)
 **File Ownership:**
