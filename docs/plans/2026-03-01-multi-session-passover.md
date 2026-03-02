@@ -2,7 +2,7 @@
 
 > **Date:** 2026-03-01
 > **Orchestrator:** Session O (this document's owner)
-> **Active Sessions:** A, B, C, D, O
+> **Active Sessions:** A, B, C, D, F, O
 > **Test Clusters:** sbox (dev), sbox1 (staging), sbox42 (integration — deploying)
 
 ## CRITICAL: Passwords Changed on ALL Clusters
@@ -235,6 +235,7 @@ Session A owns sandbox.py and SandboxPage.tsx — do NOT touch those files.
 ### Session C — HITL & Session Orchestration (sbox1 cluster)
 
 **Role:** Wire HITL approve/deny, implement sub-agent delegation, passover
+**Claude Session:** `487d5f15`
 **Cluster:** sbox1
 **File Ownership:**
 - `kagenti/ui-v2/src/pages/SandboxesPage.tsx` — EXCLUSIVE
@@ -406,6 +407,41 @@ KAGENTI_UI_URL=https://kagenti-ui-kagenti-system.apps.kagenti-team-sbox42.octo-e
 | O (sbox42 test) | B | agent Dockerfile / `agent.py` | **P0**: TOFU hash write `PermissionError: /app/.tofu-hashes.json` on OCP with arbitrary UID. `/app` owned by 1001 but OCP assigns different UID. Fix: `chmod g+w /app` in Dockerfile OR write to `/tmp`. sbox42 workaround: `runAsUser: 1001` patch. | NEW |
 | O (sbox42 test) | D | `agent-chat-identity.spec.ts` | 4 multi-user tests fail on sbox42 — Keycloak `dev-user`/`ns-admin` not created. Session D must run user creation on sbox42 or tests need cluster-agnostic setup. | NEW |
 | O (sbox42 test) | A | `sandbox-rendering.spec.ts` | Tool call steps not rendered (`found: 0`). Agent streams response but ToolCallStep components produce no DOM elements. Frontend rendering bug. | NEW |
+
+---
+
+### Session F — Composable Sandbox Security (no cluster)
+
+**Role:** Design + implement composable sandbox security model, Landlock wiring, SandboxClaim integration
+**Cluster:** None (unit tests only — no cluster needed)
+**File Ownership:**
+- `deployments/sandbox/sandbox_profile.py` — EXCLUSIVE (NEW, created by F)
+- `deployments/sandbox/tests/` — EXCLUSIVE (NEW, created by F)
+- `kagenti/backend/app/routers/sandbox_trigger.py` — EXCLUSIVE (NEW, created by F)
+- `kagenti/backend/tests/test_sandbox_trigger.py` — EXCLUSIVE (NEW, created by F)
+- `docs/plans/2026-03-01-sandbox-platform-design.md` Section 3 — EXCLUSIVE (Session F additions)
+- `docs/plans/2026-03-01-composable-sandbox-impl.md` — EXCLUSIVE
+- `deployments/sandbox/*.py` (nono_launcher, tofu, repo_manager, triggers) — SHARED with Session B (copied from worktree, B owns originals in `.worktrees/`)
+
+**Completed Tasks:**
+1. ✅ Design: Composable 5-tier sandbox model (T0-T4) with self-documenting names
+2. ✅ Design: Wizard flow with independent layer toggles + warnings for unusual combos
+3. ✅ Design: SandboxClaim vs Deployment toggle (user chooses in wizard)
+4. ✅ Updated design doc Section 2 (Container Diagram) + Section 3 (new) + Section 6 (Layer×Tier matrix)
+5. ✅ Copied sandbox modules from worktree to `deployments/sandbox/`
+6. ✅ Created `sandbox_profile.py` — composable name builder + K8s manifest generator (20 tests)
+7. ✅ Unit tests for `nono_launcher.py` (5 tests), `tofu.py` (11 tests), `repo_manager.py` (10 tests), `triggers.py` (7 tests)
+8. ✅ Created `sandbox_trigger.py` FastAPI router — `POST /api/v1/sandbox/trigger` (9 tests)
+9. ✅ Registered router in `main.py`
+10. ✅ **303 total tests passing** (250 existing backend + 53 new sandbox)
+
+**Remaining Tasks:**
+- P1: Update wizard UI (ImportAgentPage.tsx) with composable security toggles
+- P1: Update `sandbox-template-full.yaml` entrypoint to use `nono_launcher.py`
+- P2: Wire `repo_manager.py` into `agent_server.py`
+- P2: Wire `tofu.py` into `nono_launcher.py` startup sequence
+
+**Note:** Session B has `deployments/sandbox/` as EXCLUSIVE. Session F added NEW files there (sandbox_profile.py, tests/) and copied modules from the worktree. No existing Session B files were modified. Coordinate with Session B if conflicts arise.
 
 ---
 

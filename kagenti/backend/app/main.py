@@ -31,7 +31,7 @@ class NoCacheMiddleware(BaseHTTPMiddleware):
 
 
 from app.core.config import settings
-from app.routers import agents, tools, namespaces, config, auth, chat
+from app.routers import agents, tools, namespaces, config, auth, chat, sandbox_trigger
 
 # Configure logging
 logging.basicConfig(
@@ -104,6 +104,7 @@ app.include_router(agents.router, prefix="/api/v1")
 app.include_router(tools.router, prefix="/api/v1")
 app.include_router(config.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
+app.include_router(sandbox_trigger.router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["health"])
