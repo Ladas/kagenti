@@ -146,8 +146,8 @@ C4Container
 | **Backend** — Auth middleware | Keycloak JWT extraction, per-message username injection | 🔧 Partial (deployed, needs DB connection fix) |
 | **T0** — `sandbox-legion` | Default security context, PostgreSQL checkpointer | ✅ Built |
 | **T1** — `sandbox-legion-secctx` | non-root, drop ALL caps, seccomp RuntimeDefault, NetworkPolicy | ✅ Built |
-| **T2** — `sandbox-legion-secctx-landlock` | T1 + Landlock (nono-launcher.py) + TOFU verification | 🔧 Partial (nono exists, not wired into entrypoint) |
-| **T3** — `sandbox-legion-secctx-landlock-proxy` | T2 + Squid proxy sidecar + repo_manager source policy | 🔧 Partial (Squid deployed, Landlock + repo_manager not wired) |
+| **T2** — `sandbox-legion-secctx-landlock` | T1 + Landlock (nono_launcher.py) + TOFU verification | ✅ Wired (Session F) — needs cluster deploy test |
+| **T3** — `sandbox-legion-secctx-landlock-proxy` | T2 + Squid proxy sidecar + repo_manager source policy | ✅ Wired (Session F) — needs cluster deploy test |
 | **T4** — `sandbox-legion-secctx-landlock-proxy-gvisor` | T3 + gVisor RuntimeClass | ❌ Blocked (gVisor incompatible with OpenShift SELinux) |
 | **PostgreSQL** | Per-namespace StatefulSet, LangGraph checkpointer | 🔧 Partial (Istio ztunnel corrupts asyncpg connections) |
 | **Keycloak** | OIDC provider with RHBK operator | ✅ Built |
@@ -486,7 +486,7 @@ The sandbox agent platform uses 7 independent security layers. Compromising one 
 | 3 | **Istio Ambient mTLS** | Network eavesdropping — all pod-to-pod traffic encrypted via ztunnel, no plaintext on the wire | ✅ Built |
 | 4 | **SecurityContext** (non-root, drop caps, seccomp) | Privilege escalation — prevents container breakout, restricts syscalls, enforces read-only rootfs | ✅ Built (hardened variant) |
 | 5 | **Network Policy + Squid Proxy** | Data exfiltration — allowlist of permitted external domains (GitHub, PyPI, LLM APIs); all other egress blocked | 🔧 Partial (Squid proxy designed and tested, not deployed to all variants) |
-| 6 | **Landlock** (nono binary) | Filesystem escape — kernel-enforced restrictions on which paths the agent process can read/write (e.g., allow /workspace, deny /etc) | 🔧 Partial (nono binary exists and tested, not integrated into agent startup) |
+| 6 | **Landlock** (nono binary) | Filesystem escape — kernel-enforced restrictions on which paths the agent process can read/write (e.g., allow /workspace, deny /etc) | ✅ Wired (Session F) — nono_launcher.py wraps agent entrypoint in sandbox-template-full.yaml |
 | 7 | **HITL Approval Gates** | Destructive actions — dangerous tool calls require explicit human approval before execution | 🔧 Partial (buttons exist, resume not wired) |
 
 ### Security Layer × Tier Matrix
@@ -497,8 +497,8 @@ Each tier preset enables a progressive combination of layers. Custom combos are 
 |:----:|------|:-----------:|:-------:|:-------:|:---------:|:---------:|:-----------:|:--------:|:---------:|:-------:|--------|
 | T0 | `sandbox-legion` | ✅ | ✅ | ✅ | -- | -- | -- | -- | -- | ✅ | ✅ Built |
 | T1 | `sandbox-legion-secctx` | ✅ | ✅ | ✅ | ✅ | ✅ | -- | -- | -- | ✅ | ✅ Built |
-| T2 | `sandbox-legion-secctx-landlock` | ✅ | ✅ | ✅ | ✅ | ✅ | 🔧 | -- | -- | ✅ | 🔧 nono not wired |
-| T3 | `sandbox-legion-secctx-landlock-proxy` | ✅ | ✅ | ✅ | ✅ | ✅ | 🔧 | ✅ | -- | ✅ | 🔧 nono not wired |
+| T2 | `sandbox-legion-secctx-landlock` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | -- | -- | ✅ | ✅ Wired (Session F) |
+| T3 | `sandbox-legion-secctx-landlock-proxy` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | -- | ✅ | ✅ Wired (Session F) |
 | T4 | `sandbox-legion-secctx-landlock-proxy-gvisor` | ✅ | ✅ | ✅ | ✅ | ✅ | 🔧 | ✅ | ❌ | ✅ | ❌ gVisor blocked |
 
 > **Layers L1-L3 and L9 (HITL) are always on** — Keycloak, RBAC, Istio mTLS, and HITL approval gates apply to all tiers. They are platform-level, not per-agent toggles.
@@ -532,6 +532,11 @@ Each tier preset enables a progressive combination of layers. Custom combos are 
 | JSON-first event serializer | LangGraphSerializer emits structured JSON events; backend parses JSON first with regex fallback for legacy sessions |
 | Route timeout 120s | Both kagenti-api and kagenti-ui OpenShift routes configured with 120s annotation |
 | CI pipeline passing | Build (3.11/3.12), DCO, Helm Lint, Bandit, Shell Lint, YAML Lint, Trivy — all passing on PR #758 |
+| Landlock + TOFU wired into agent startup (Session F) | `nono_launcher.py` wraps agent entrypoint with Landlock enforcement + TOFU hash verification before Landlock locks filesystem. `TOFU_ENFORCE=true` blocks on mismatch. 10 unit tests. |
+| `sandbox_profile.py` composable manifest builder (Session F) | Generates self-documenting names (`sandbox-legion-secctx-landlock-proxy`) + K8s Deployment or SandboxClaim manifests from layer toggles. 20 unit tests. |
+| `repo_manager.py` wired into agent_server (Session F) | Loads `sources.json` policy on startup, enforces allowed/denied remotes on git clone, `/repos` endpoint. 10+5 unit tests. |
+| Trigger API `POST /api/v1/sandbox/trigger` (Session F) | FastAPI endpoint creates SandboxClaim resources from cron/webhook/alert events. Registered in main.py. 7+9 unit tests. |
+| 72 sandbox unit tests (Session F) | `sandbox_profile` (20), `nono_launcher` (10), `tofu` (11), `repo_manager` (10), `triggers` (7), `agent_server` (5), `sandbox_trigger` router (9) |
 
 ### Critical Blockers (🚨)
 
@@ -549,9 +554,9 @@ Each tier preset enables a progressive combination of layers. Custom combos are 
 | Wizard deploy | UI wizard generates manifest with security contexts and credentials | No Shipwright build trigger — wizard creates manifest but does not start container build |
 | Multi-user per-message identity | Code deployed to backend (JWT extraction) and frontend (username labels) | Blocked by asyncpg DB connection failure (Istio ztunnel); cannot persist identity metadata |
 | Squid proxy network filtering | Proxy built and tested (GitHub/PyPI allowed, evil.com blocked) | Deployed as sidecar on T3 preset; wizard needs to generate sidecar spec when `-proxy` toggle is on |
-| Landlock filesystem sandbox | nono-launcher.py complete (91 lines), tested on RHCOS 5.14 kernel | Not wired into agent entrypoint; T2/T3 presets need `python3 nono-launcher.py python3 agent_server.py` |
-| Composable wizard security toggles | Tier presets defined (T0-T4), layer combinations designed (Session F) | Wizard UI needs individual layer toggles + warning for unusual combos |
-| SandboxClaim integration | `triggers.py` creates SandboxClaim via `kubectl apply`; controller deployed to `agent-sandbox-system` | FastAPI endpoint `POST /api/v1/sandbox/trigger` not wired; wizard needs SandboxClaim toggle |
+| Landlock filesystem sandbox | ✅ **Wired (Session F)** — `nono_launcher.py` wraps agent entrypoint + TOFU verification on startup | Needs cluster deployment test (template updated, not yet deployed to cluster) |
+| Composable wizard security toggles | Tier presets defined (T0-T4), `sandbox_profile.py` generates names + manifests (20 tests, Session F) | Wizard UI needs individual layer toggles + warning for unusual combos |
+| SandboxClaim trigger API | ✅ **Wired (Session F)** — `POST /api/v1/sandbox/trigger` endpoint registered in main.py (9 tests) | Wizard UI needs SandboxClaim toggle; endpoint needs auth middleware |
 
 ### Not Built (❌)
 
@@ -563,8 +568,7 @@ Each tier preset enables a progressive combination of layers. Custom combos are 
 | External DB URL wiring | Not designed | Istio ztunnel fix (once asyncpg works, external DB is straightforward) |
 | Workspace cleanup / TTL | SandboxClaim has `shutdownTime` + `Delete` policy fields | No cleanup controller; expired sandboxes are not reaped |
 | Multi-channel HITL delivery | Designed: GitHub PR comments, Slack interactive messages, PagerDuty, Kagenti UI adapters | HITL resume endpoint must work first (Layer 7) |
-| Autonomous triggers (cron / webhook / alert) | Designed: SandboxTrigger module, FastAPI endpoint, Integration CRD | SandboxClaim CRD + controller |
-| TOFU hash verification | Logic tested (SHA-256 of CLAUDE.md, detects tampering, ConfigMap storage) | Not integrated into sandbox init container flow |
+| Autonomous triggers (cron / webhook / alert) | ✅ **Backend wired (Session F)** — `POST /api/v1/sandbox/trigger`. Needs UI trigger management page + cron scheduler. | SandboxClaim CRD + controller (deployed) |
 
 ---
 

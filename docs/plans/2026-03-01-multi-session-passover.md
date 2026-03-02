@@ -1,9 +1,11 @@
 # Multi-Session Sandbox Development Coordination
 
 > **Date:** 2026-03-01
-> **Orchestrator:** Session O (this document's owner)
+> **Main Coordinator:** `9468f782` — runs tests, monitors sessions, updates this doc
+> **Main Coordinator:** Session `9468f782` — runs cross-cluster tests, monitors all sessions, updates doc
+> **Orchestrator:** Session O (spawns sub-sessions)
 > **Active Sessions:** A, B, C, D, E, F, O
-> **Test Clusters:** sbox (dev), sbox1 (staging), sbox42 (integration — deploying)
+> **Test Clusters:** sbox (dev), sbox1 (staging), sbox42 (integration)
 
 ## CRITICAL: Passwords Changed on ALL Clusters
 
@@ -433,16 +435,27 @@ KAGENTI_UI_URL=https://kagenti-ui-kagenti-system.apps.kagenti-team-sbox42.octo-e
 4. ✅ Updated design doc Section 2 (Container Diagram) + Section 3 (new) + Section 6 (Layer×Tier matrix)
 5. ✅ Copied sandbox modules from worktree to `deployments/sandbox/`
 6. ✅ Created `sandbox_profile.py` — composable name builder + K8s manifest generator (20 tests)
-7. ✅ Unit tests for `nono_launcher.py` (5 tests), `tofu.py` (11 tests), `repo_manager.py` (10 tests), `triggers.py` (7 tests)
+7. ✅ Unit tests for all modules: nono_launcher (10), tofu (11), repo_manager (10), triggers (7), agent_server (5)
 8. ✅ Created `sandbox_trigger.py` FastAPI router — `POST /api/v1/sandbox/trigger` (9 tests)
 9. ✅ Registered router in `main.py`
-10. ✅ **303 total tests passing** (250 existing backend + 53 new sandbox)
+10. ✅ Wired TOFU verification into `nono_launcher.py` (runs before Landlock, `TOFU_ENFORCE=true` blocks)
+11. ✅ Wired `nono_launcher.py` into `sandbox-template-full.yaml` entrypoint (replaces `sleep 36000`)
+12. ✅ Wired `repo_manager.py` into `agent_server.py` (loads sources.json, `/repos` endpoint)
+13. ✅ Updated design doc: Layer×Tier matrix (T2/T3 now ✅), Built section, Partial section
+14. ✅ **322 total tests passing** (250 existing backend + 63 sandbox module + 9 trigger router)
+
+**Commits:**
+```
+18640cd9 feat(sandbox): composable security model + modules + trigger API (Session F)
+ceb51a5b feat(sandbox): wire TOFU + Landlock + repo_manager, register Session F
+```
 
 **Remaining Tasks:**
-- P1: Update wizard UI (ImportAgentPage.tsx) with composable security toggles
-- P1: Update `sandbox-template-full.yaml` entrypoint to use `nono_launcher.py`
-- P2: Wire `repo_manager.py` into `agent_server.py`
-- P2: Wire `tofu.py` into `nono_launcher.py` startup sequence
+- P1: Update wizard UI (ImportAgentPage.tsx) with composable security layer toggles (needs Session A/B coordination — ImportAgentPage is currently unowned)
+- P1: Deploy wired templates to cluster and run E2E test (needs cluster access — coordinate with Session O)
+- P2: Add auth middleware to `/api/v1/sandbox/trigger` endpoint (currently unauthenticated)
+- P2: Wire `sandbox_profile.py` into wizard deploy backend (generate manifests from layer toggles instead of hardcoded)
+- P3: UI for trigger management (cron schedule editor, webhook config, alert mapping)
 
 **Note:** Session B has `deployments/sandbox/` as EXCLUSIVE. Session F added NEW files there (sandbox_profile.py, tests/) and copied modules from the worktree. No existing Session B files were modified. Coordinate with Session B if conflicts arise.
 
