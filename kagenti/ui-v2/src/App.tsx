@@ -19,6 +19,7 @@ import { ObservabilityPage } from './pages/ObservabilityPage';
 import { ImportAgentPage } from './pages/ImportAgentPage';
 import { ImportToolPage } from './pages/ImportToolPage';
 import { AdminPage } from './pages/AdminPage';
+import { SessionGraphPage } from './pages/SessionGraphPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
 function App() {
@@ -130,6 +131,14 @@ function App() {
           element={
             <ProtectedRoute>
               <AdminPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/sandbox/graph"
+          element={
+            <ProtectedRoute>
+              <SessionGraphPage />
             </ProtectedRoute>
           }
         />
