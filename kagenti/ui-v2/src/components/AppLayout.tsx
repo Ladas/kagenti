@@ -334,6 +334,13 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                   >
                     Tools
                   </NavItem>
+                  <NavItem
+                    itemId="file-browser"
+                    isActive={isNavItemActive('/sandbox/files')}
+                    onClick={() => handleNavSelect('/sandbox/files')}
+                  >
+                    Files
+                  </NavItem>
                 </NavList>
               </NavGroup>
 

@@ -20,6 +20,7 @@ import { ImportAgentPage } from './pages/ImportAgentPage';
 import { ImportToolPage } from './pages/ImportToolPage';
 import { AdminPage } from './pages/AdminPage';
 import { SessionGraphPage } from './pages/SessionGraphPage';
+import { FileBrowser } from './components/FileBrowser';
 import { NotFoundPage } from './pages/NotFoundPage';
 
 function App() {
@@ -139,6 +140,14 @@ function App() {
           element={
             <ProtectedRoute>
               <SessionGraphPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/sandbox/files/:namespace/:agentName"
+          element={
+            <ProtectedRoute>
+              <FileBrowser />
             </ProtectedRoute>
           }
         />
