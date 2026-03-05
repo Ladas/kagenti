@@ -18,20 +18,22 @@ reported through proper channels.
 
 ## Router
 
+```mermaid
+flowchart TD
+    START(["/cve"]) --> WHAT{"What is needed?"}
+    WHAT -->|"Scan / Check deps / Review"| SCAN["cve:scan"]:::cve
+    WHAT -->|"CVE found, need plan"| BRAINSTORM["cve:brainstorm"]:::block
+    WHAT -->|"No specific request"| SCAN
+
+    classDef cve fill:#D32F2F,stroke:#333,color:white
+    classDef block fill:#B71C1C,stroke:#333,color:white
+```
+
 When `/cve` is invoked, determine the entry point:
 
-```
-What is needed?
-    |
-    +-- "Scan for CVEs" / "Check dependencies" / "Security review"
-    |   -> cve:scan (full scan: dependencies + code + docs)
-    |
-    +-- CVE was found, need response plan
-    |   -> cve:brainstorm
-    |
-    +-- No specific request
-        -> cve:scan (default: scan first)
-```
+- **"Scan for CVEs"** / **"Check dependencies"** / **"Security review"** → `cve:scan`
+- **CVE was found, need response plan** → `cve:brainstorm`
+- **No specific request** → `cve:scan` (default: scan first)
 
 ## What cve:scan Covers
 

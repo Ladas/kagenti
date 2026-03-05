@@ -82,7 +82,11 @@ Record the inventory as a table in the report:
 ## Phase 2: Trivy Scan (if available)
 
 ```bash
-which trivy 2>/dev/null && trivy --version
+which trivy 2>/dev/null
+```
+
+```bash
+trivy --version
 ```
 
 If installed, run filesystem and config scans:
