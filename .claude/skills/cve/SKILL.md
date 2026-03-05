@@ -1,12 +1,12 @@
 ---
 name: cve
-description: CVE awareness - scan dependencies for vulnerabilities, plan responsible disclosure, block public leaks
+description: CVE awareness — scan dependencies and code for vulnerabilities, audit docs for CVE leaks, plan responsible disclosure, block public leaks
 ---
 
 # CVE Awareness
 
-Detect CVEs in project dependencies and ensure responsible disclosure before any
-public communication.
+Detect CVEs in project dependencies and source code, audit documentation for
+CVE leaks, and ensure responsible disclosure before any public communication.
 
 ## IMPORTANT
 
@@ -23,8 +23,8 @@ When `/cve` is invoked, determine the entry point:
 ```
 What is needed?
     |
-    +-- "Scan for CVEs" / "Check dependencies"
-    |   -> cve:scan
+    +-- "Scan for CVEs" / "Check dependencies" / "Security review"
+    |   -> cve:scan (full scan: dependencies + code + docs)
     |
     +-- CVE was found, need response plan
     |   -> cve:brainstorm
@@ -32,6 +32,17 @@ What is needed?
     +-- No specific request
         -> cve:scan (default: scan first)
 ```
+
+## What cve:scan Covers
+
+| Phase | Scanner | Focus |
+|-------|---------|-------|
+| 1 | Dependency inventory | All manifests: pyproject.toml, package.json, go.mod, Dockerfiles, Helm charts |
+| 2 | Trivy (if available) | Filesystem + container image scanning |
+| 3 | LLM + WebSearch | Known CVEs against NVD/Snyk/GitHub Advisories |
+| 4 | Code security review | Auth, injection, secrets, containers, CI/CD, network patterns |
+| 5 | Documentation audit | CVE references in .md files that could leak publicly |
+| 6 | Combined report | `SUMMARY.md` in `.cves/` (gitignored) |
 
 ## When This Runs Automatically
 
@@ -46,7 +57,21 @@ These skills are invoked as mandatory gates in other workflows:
 | `git:commit` | Pre-commit (scan for CVE IDs in message) | CVE ID check |
 | Finishing branch | Step 2.5 (before PR creation options) | `cve:scan` |
 
+## Output Location
+
+All scan results go to `.cves/` (gitignored):
+
+```
+.cves/
+├── SUMMARY.md                    # Combined report (copy to Google Docs)
+├── cve-scan-results.md           # Dependency CVE findings
+├── security-review-results.md    # Source code security findings
+├── md-audit-results.md           # Documentation CVE leak audit
+├── trivy-fs.json                 # Trivy output (if available)
+└── trivy-config-*.txt            # Trivy Dockerfile scans
+```
+
 ## Related Skills
 
-- `cve:scan` - Hybrid CVE scanning (Trivy + LLM + WebSearch)
-- `cve:brainstorm` - Disclosure planning and public output blocking
+- `cve:scan` — Full scanning (dependencies + code + docs)
+- `cve:brainstorm` — Disclosure planning and public output blocking
