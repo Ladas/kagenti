@@ -1,6 +1,6 @@
 {{- if and .Values.components.metricsServer.enabled (not .Values.openshift) }}
 # ------------------------------------------------------------------
-#  OpenShift has built-in monitoring for resource usage 
+#  OpenShift has built-in monitoring for resource usage
 #  so no need for metrics server
 # ------------------------------------------------------------------
 apiVersion: v1
@@ -178,6 +178,9 @@ spec:
           periodSeconds: 10
         resources:
           requests:
+            cpu: 50m
+            memory: 100Mi
+          limits:
             cpu: 100m
             memory: 200Mi
         securityContext:

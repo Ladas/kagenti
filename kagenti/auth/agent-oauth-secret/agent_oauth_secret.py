@@ -1,4 +1,4 @@
-# Assisted by watsonx Code Assistant
+# This file was modified with the assistance of Bob.
 # Copyright 2025 IBM Corp.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +15,6 @@
 
 import os
 import time
-import base64
 import typer
 from typing import Optional, Tuple
 from kubernetes import client, config as kube_config
@@ -23,87 +22,57 @@ from kubernetes.client.rest import ApiException
 
 from keycloak import KeycloakAdmin, KeycloakPostError
 
+# Import common utilities
+from common import (
+    get_optional_env as _get_optional_env,
+    read_keycloak_credentials as _read_keycloak_credentials,
+    configure_ssl_verification as _configure_ssl_verification,
+)
+
 
 # Constants
 DEFAULT_KEYCLOAK_NAMESPACE = "keycloak"
 DEFAULT_ADMIN_SECRET_NAME = "keycloak-initial-admin"
 DEFAULT_ADMIN_USERNAME_KEY = "username"
 DEFAULT_ADMIN_PASSWORD_KEY = "password"
-DEFAULT_SPIFFE_PREFIX = "spiffe://localtest.me/sa"
+DEFAULT_DOMAIN_NAME = os.environ.get("DOMAIN_NAME", "localtest.me")
+DEFAULT_SPIFFE_PREFIX = f"spiffe://{DEFAULT_DOMAIN_NAME}/sa"
 
 
 def get_optional_env(key: str, default: Optional[str] = None) -> Optional[str]:
     """Get an optional environment variable with optional default."""
-    return os.environ.get(key, default)
+    return _get_optional_env(key, default)
 
 
 def read_keycloak_credentials(
     v1_api: client.CoreV1Api,
-    secret_name: str,
+    credential_ref: str,
     namespace: str,
     username_key: str,
     password_key: str,
 ) -> Tuple[str, str]:
     """Read Keycloak admin credentials from a Kubernetes secret.
 
-    Args:
-        v1_api: Kubernetes CoreV1Api client
-        secret_name: Name of the secret
-        namespace: Namespace where secret exists
-        username_key: Key in secret data for username
-        password_key: Key in secret data for password
-
-    Returns:
-        Tuple of (username, password)
-
-    Raises:
-        ApiException: If secret cannot be read or keys are missing
+    Wrapper around common.read_keycloak_credentials that uses typer for output.
     """
     try:
         typer.echo(
-            f"Reading Keycloak admin credentials from secret {secret_name} in namespace {namespace}"
+            f"Reading Keycloak admin credentials from secret {credential_ref} in namespace {namespace}"
         )
-        secret = v1_api.read_namespaced_secret(secret_name, namespace)
-
-        if username_key not in secret.data:
-            raise ValueError(
-                f"Secret {secret_name} in namespace {namespace} missing key '{username_key}'"
-            )
-        if password_key not in secret.data:
-            raise ValueError(
-                f"Secret {secret_name} in namespace {namespace} missing key '{password_key}'"
-            )
-
-        username = base64.b64decode(secret.data[username_key]).decode("utf-8").strip()
-        password = base64.b64decode(secret.data[password_key]).decode("utf-8").strip()
-
+        username, password = _read_keycloak_credentials(
+            v1_api, credential_ref, namespace, username_key, password_key
+        )
         typer.echo("Successfully read credentials from secret")
         return username, password
-    except ApiException as e:
-        typer.secho(
-            f"Could not read Keycloak admin secret {secret_name} in namespace {namespace}: {e}",
-            fg="red",
-            err=True,
-        )
-        raise
     except Exception as e:
-        typer.secho(f"Unexpected error reading secret: {e}", fg="red", err=True)
+        typer.secho(f"Error reading credentials: {e}", fg="red", err=True)
         raise
 
 
 def configure_ssl_verification(ssl_cert_file: Optional[str]) -> Optional[str]:
     """Configure SSL verification based on certificate file availability.
 
-    Behavior:
-    - If an explicit SSL_CERT_FILE path is provided and exists, return that path.
-    - Otherwise return None, which indicates to callers that the default
-      system CA bundle (requests/certifi) should be used.
-
-    Args:
-        ssl_cert_file: Path to SSL certificate file
-
-    Returns:
-        Path to cert file if available and exists, otherwise None
+    Wrapper around common.configure_ssl_verification that uses typer for output.
     """
     if ssl_cert_file:
         if os.path.exists(ssl_cert_file):
@@ -111,11 +80,11 @@ def configure_ssl_verification(ssl_cert_file: Optional[str]) -> Optional[str]:
             return ssl_cert_file
         else:
             typer.secho(
-                f"Provided SSL_CERT_FILE '{ssl_cert_file}' does not exist. Falling back to system CA bundle. Verify the path or remove SSL_CERT_FILE to use system defaults.",
+                f"Provided SSL_CERT_FILE '{ssl_cert_file}' does not exist. Falling back to system CA bundle.",
                 fg="yellow",
             )
+            return None
 
-    # No explicit certificate provided or file missing: use system CA bundle
     typer.echo("No SSL_CERT_FILE provided - using system CA bundle for verification")
     return None
 
@@ -137,7 +106,7 @@ def get_keycloak_env_config() -> Tuple[str, str, Optional[str], str]:
     Returns a tuple: (base_url, demo_realm_name, ssl_cert_file, spiffe_prefix)
     """
     base_url = get_optional_env(
-        "KEYCLOAK_BASE_URL", "http://keycloak.localtest.me:8080"
+        "KEYCLOAK_BASE_URL", f"http://keycloak.{DEFAULT_DOMAIN_NAME}:8080"
     )
     demo_realm_name = get_optional_env("KEYCLOAK_DEMO_REALM", "demo")
     ssl_cert_file = get_optional_env("SSL_CERT_FILE")
@@ -266,10 +235,13 @@ class KeycloakSetup:
             typer.echo(f'Unexpected error creating realm "{self.realm_name}": {e}')
 
     def create_user(self, username, password: Optional[str] = None):
-        """Create a Keycloak user with the provided password.
+        """Create a Keycloak user and add to mlflow groups.
 
         If `password` is None or empty the function will skip creation and
         emit a warning. This avoids hardcoding default passwords in source.
+
+        The user is added to 'mlflow' and 'mlflow-admin' groups so they can
+        log in to MLflow via mlflow-oidc-auth (which requires group membership).
         """
         if not password:
             typer.secho(
@@ -279,20 +251,47 @@ class KeycloakSetup:
             return
 
         try:
-            self.keycloak_admin.create_user(
+            user_id = self.keycloak_admin.create_user(
                 {
                     "username": username,
                     "firstName": username,
                     "lastName": username,
-                    "email": f"{username}@test.com",
+                    "email": f"{username}@kagenti.dev",
                     "emailVerified": True,
                     "enabled": True,
                     "credentials": [{"value": password, "type": "password"}],
                 }
             )
-            typer.echo(f'Created user "{username}"')
+            typer.echo(f'Created user "{username}" (id: {user_id})')
         except KeycloakPostError:
             typer.echo(f'User "{username}" already exists')
+            # Get existing user ID for group assignment
+            users = self.keycloak_admin.get_users({"username": username})
+            user_id = users[0]["id"] if users else None
+
+        # Add user to mlflow groups (required by mlflow-oidc-auth)
+        if user_id:
+            for group_name in ["mlflow", "mlflow-admin"]:
+                try:
+                    groups = self.keycloak_admin.get_groups({"search": group_name})
+                    matching = [g for g in groups if g["name"] == group_name]
+                    if matching:
+                        self.keycloak_admin.group_user_add(user_id, matching[0]["id"])
+                        typer.echo(f'Added "{username}" to group "{group_name}"')
+                    else:
+                        # Create group if it doesn't exist
+                        group_id = self.keycloak_admin.create_group(
+                            {"name": group_name}
+                        )
+                        self.keycloak_admin.group_user_add(user_id, group_id)
+                        typer.echo(
+                            f'Created group "{group_name}" and added "{username}"'
+                        )
+                except Exception as e:
+                    typer.secho(
+                        f'Warning: Could not add "{username}" to group "{group_name}": {e}',
+                        fg="yellow",
+                    )
 
     def create_client(self, app_name, spiffe_prefix):
         try:
@@ -356,19 +355,52 @@ def setup_keycloak(v1_api: Optional[client.CoreV1Api] = None) -> str:
         raise typer.Exit(1)
     setup.create_realm()
 
-    # Optionally create a demo/test user. Controlled by env var
-    # `CREATE_KEYCLOAK_TEST_USER` (defaults to true for backwards compatibility).
+    # Create a test user in the configured realm for UI/MLflow login.
+    # Generates a random password and stores credentials in a K8s secret.
     create_test_user = parse_bool(get_optional_env("CREATE_KEYCLOAK_TEST_USER", "true"))
     if create_test_user:
-        test_user_name = get_optional_env("KEYCLOAK_TEST_USER_NAME", "test-user")
+        test_user_name = get_optional_env("KEYCLOAK_TEST_USER_NAME", "admin")
         test_user_password = get_optional_env("KEYCLOAK_TEST_USER_PASSWORD")
         if not test_user_password:
-            typer.secho(
-                "Environment variable KEYCLOAK_TEST_USER_PASSWORD not set; skipping test user creation",
-                fg="yellow",
+            import secrets as secrets_mod
+
+            test_user_password = secrets_mod.token_urlsafe(16)
+            typer.echo(f"Generated random password for test user '{test_user_name}'")
+
+        setup.create_user(test_user_name, test_user_password)
+
+        # Store test user credentials in a K8s secret for show-services.sh and tests
+        try:
+            secret_namespace = get_optional_env("KEYCLOAK_NAMESPACE", "keycloak")
+            secret_name = "kagenti-test-user"
+            secret_body = client.V1Secret(
+                metadata=client.V1ObjectMeta(
+                    name=secret_name,
+                    namespace=secret_namespace,
+                    labels={"app": "kagenti", "kagenti.io/type": "test-credentials"},
+                ),
+                string_data={
+                    "username": test_user_name,
+                    "password": test_user_password,
+                    "realm": get_optional_env("KEYCLOAK_DEMO_REALM", "demo"),
+                },
+                type="Opaque",
             )
-        else:
-            setup.create_user(test_user_name, test_user_password)
+            try:
+                v1_api.create_namespaced_secret(secret_namespace, secret_body)
+                typer.echo(f"Created secret '{secret_name}' with test user credentials")
+            except ApiException as e:
+                if e.status == 409:
+                    v1_api.replace_namespaced_secret(
+                        secret_name, secret_namespace, secret_body
+                    )
+                    typer.echo(
+                        f"Updated secret '{secret_name}' with test user credentials"
+                    )
+                else:
+                    raise
+        except Exception as e:
+            typer.secho(f"Warning: Could not store test user secret: {e}", fg="yellow")
     else:
         typer.echo(
             "Skipping creation of Keycloak test user (CREATE_KEYCLOAK_TEST_USER=false)"

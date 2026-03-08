@@ -2,11 +2,13 @@
 
 ## Issues during Kagenti installation
 
-### kagenti-installer reports "exceeded its progress deadline"
+### Installation reports "exceeded its progress deadline"
 
-Sometimes it can take a long time to pull container images.  Try re-running the installer.  Use `kubectl get deployments --all-namespaces` to identify failing deployments.
+Sometimes it can take a long time to pull container images. Try re-running the installer. Use `kubectl get deployments --all-namespaces` to identify failing deployments.
 
-### kagenti-installer complains "Please start the Docker daemon." when using Colima instead of Docker Desktop
+See `deployments/ansible/README.md` for troubleshooting and image preloading guidance.
+
+### Docker daemon issues when using Colima instead of Docker Desktop
 
 ```shell
 export DOCKER_HOST="unix://$HOME/.colima/docker.sock"
@@ -93,13 +95,13 @@ kubectl rollout restart -n kagenti-system deployment http-istio
 
 ### Need to edit ENV values
 
-If you need to update the values in `.env` file, e.g., `GITHUB_TOKEN`
-delete the secret in all your auto-created namespaces, then re-run the install
+If you need to update the values in `deployments/envs/.secret_values.yaml` file, e.g., `githubToken`,
+delete the secret in all your auto-created namespaces, then re-run the installer:
 
 ```shell
 kubectl get secret --all-namespaces
 kubectl -n my-namespace delete github-token-secret
-uv run kagenti-installer
+deployments/ansible/run-install.sh --env dev
 ```
 
 ### Agent log shows communication errors
@@ -144,14 +146,14 @@ At this time there is no reliable sequence of bringing down and up again
 postgres and keycloak. The only reliable approach found so far is either to destroy and re-install
 the cluster or delete and re-install keycloak as follows:
 
-Make sure you are in `<kagenti-project-root>/kagenti/installer`, then:
-
 ```shell
-kubectl delete -n keycloak -f app/resources/keycloak.yaml
-kubectl apply -n keycloak -f app/resources/keycloak.yaml
-kubectl rollout restart daemonset -n istio-system  ztunnel
+# Delete and re-apply keycloak resources
+helm uninstall keycloak -n keycloak
+deployments/ansible/run-install.sh --env dev
+
+# Restart related services
+kubectl rollout restart daemonset -n istio-system ztunnel
 kubectl rollout restart -n kagenti-system deployment http-istio
-uv run kagenti-installer --skip-install registry --skip-install addons --skip-install gateway --skip-install spire --skip-install mcp_gateway --skip-install metrics_server --skip-install inspector
 kubectl rollout restart -n kagenti-system deployment kagenti-ui
 ```
 
@@ -160,3 +162,32 @@ Deployed agents may need to be restarted to update the Keycloak client.
 ```shell
 kubectl rollout restart -n <agent-namespace> deployment <agent-deployment e.g. weather-service>
 ```
+
+### Cert-Manager Webhook Errors
+
+When running the kagenti helm chart upgrade, you may encounter an error stating `failed calling webhook "webhook.cert-manager.io" because the x509 certificate has expired.` This occurs when the internal certificates used by cert-manager to communicate with the Kubernetes API server are no longer valid, preventing the validation of resources like Certificates and Issuers.
+
+To resolve this, you must force cert-manager to regenerate its internal CA and certificates by following these steps:
+
+Delete the expired webhook secret:
+
+```shell
+kubectl delete secret cert-manager-webhook-ca -n cert-manager
+```
+
+Restart the cert-manager deployments to trigger the issuance of new certificates:
+
+```shell
+kubectl rollout restart deployment cert-manager -n cert-manager
+kubectl rollout restart deployment cert-manager-webhook -n cert-manager
+kubectl rollout restart deployment cert-manager-cainjector -n cert-manager
+```
+
+Verify the pods are healthy before retrying your Helm command:
+
+```shell
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=60s
+```
+
+Once the pods are back in a Running state with valid certificates, your `helm upgrade --install` 
+command should complete successfully.

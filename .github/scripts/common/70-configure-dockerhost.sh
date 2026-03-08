@@ -6,8 +6,8 @@ source "$SCRIPT_DIR/../lib/logging.sh"
 
 log_step "70" "Configuring dockerhost service"
 
-# Get Docker host IP
-DOCKER_HOST_IP=$(docker network inspect kind | jq -r '.[].IPAM.Config[] | select(.Gateway != null) | .Gateway' | head -1)
+# Get Docker host IP (filter for IPv4 — EndpointSlice requires addressType: IPv4)
+DOCKER_HOST_IP=$(docker network inspect kind | jq -r '.[].IPAM.Config[] | select(.Gateway != null) | .Gateway' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
 
 if [ -z "$DOCKER_HOST_IP" ] || [ "$DOCKER_HOST_IP" = "null" ]; then
     log_error "Could not determine Docker host IP"

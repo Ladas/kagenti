@@ -1,5 +1,11 @@
 # Global settings
 openshift: true
+# OpenShift version (e.g., "4.20.8") - if provided, skips cluster lookup for version detection
+# This is useful when helm diff/template can't access the cluster for lookups
+ocpVersion: ""
+# Set to true to skip ZTWIM operator installation even on OpenShift
+# Used when installing SPIRE via Helm charts (e.g., OCP < 4.19 where ZTWIM is not available)
+useSpireHelmChart: false
 
 domain: localtest.me
 
@@ -12,27 +18,29 @@ components:
   istio:
     enabled: true
   kiali:
-    enabled: true  
+    enabled: true
   keycloak:
     enabled: true
   metricsServer:
     enabled: false
   otel:
     enabled: true
+  mlflow:
+    enabled: false
   containerRegistry:
     enabled: false
   spire:
     enabled: true
   tekton:
     enabled: true
+  shipwright:
+    enabled: true
   certManager:
-    enabled: true  
-  gatewayApi:  
+    enabled: true
+  gatewayApi:
     enabled: false
   ingressGateway:
-    enabled: false 
-  toolhive:
-    enabled: true
+    enabled: false
 
 common:
   kubectlImage: "quay.io/kubestellar/kubectl:1.30.14"
@@ -50,6 +58,14 @@ keycloak:
   auth:
     adminUser: keycloakadmin
     adminPassword: your-secret-password
+  # Secret containing Keycloak admin credentials (created by RHBK operator)
+  adminSecretName: keycloak-initial-admin
+  adminUsernameKey: username
+  adminPasswordKey: password
+  # Internal Keycloak URL for OAuth secret jobs
+  url: http://keycloak-service.keycloak:8080
+  publicUrl: http://keycloak.localtest.me:8080
+  realm: demo
   httpRoute:
     annotations: {}
     parentRefs:
@@ -77,15 +93,22 @@ istio:
     profile: ambient
     namespace: istio-cni
   ztunnel:
-    namespace: istio-ztunnel  
+    namespace: istio-ztunnel
   base: {}
-  istiod: 
+  istiod:
     profile: ambient
     namespace: '{{ .Values.istio.namespace | quote }}'
 
 httpGateway:
   name: http
   namespace: "kagenti-system"
+# ------------------------------------------------------------------
+#  Shipwright / OpenShift Builds Configuration
+# ------------------------------------------------------------------
+shipwright:
+  namespace: openshift-builds
+  channel: latest
+
 # ------------------------------------------------------------------
 #  Cert Manager Configuration
 # ------------------------------------------------------------------
@@ -98,6 +121,8 @@ certManager:
 spire:
   namespace: zero-trust-workload-identity-manager
   trustDomain: localtest.me
+  # OLM channel for ZTWIM operator. Use "stable-v1" for OCP 4.20+, "tech-preview-v0.2" for OCP 4.19
+  channel: stable-v1
 
 containerRegistry:
   namespace: cr-system
@@ -107,15 +132,23 @@ containerRegistry:
     repository: ghcr.io/distribution/distribution
     tag: "3.0.0"
     pullPolicy: IfNotPresent
-  
+
   service:
     type: ClusterIP
     port: 5000
     targetPort: 5000
-  
+
   env:
     otelTracesExporter: "none"
     logLevel: "info"
+  # Resource defaults for the registry container
+  resources:
+    limits:
+      cpu: 150m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 128Mi
 
 # ------------------------------------------------------------------
 #  Metrics Server Configuration
@@ -132,3 +165,25 @@ metricsServer:
 mcpInspector:
   image: ghcr.io/modelcontextprotocol/inspector
   tag: 0.17.2
+
+# ------------------------------------------------------------------
+#  Phoenix Configuration
+# ------------------------------------------------------------------
+phoenix:
+  auth:
+    # Enable Keycloak OAuth2 authentication for Phoenix dashboard
+    # Set to true in ocp_values.yaml for production deployments
+    enabled: false
+    secretName: phoenix-oauth-secret
+
+# ------------------------------------------------------------------
+#  MLflow Configuration
+# ------------------------------------------------------------------
+mlflow:
+  namespace: kagenti-system
+  auth:
+    # Enable Keycloak OAuth2 authentication for MLflow
+    # Set to true in ocp_values.yaml for production deployments
+    enabled: false
+    secretName: mlflow-oauth-secret
+

@@ -1,4 +1,6 @@
 {{- if and .Values.components.tekton.enabled .Values.openshift }}
+{{- /* Skip if Tekton/Pipelines operator Subscription already exists */}}
+{{- if not (lookup "operators.coreos.com/v1alpha1" "Subscription" "openshift-operators" "openshift-pipelines-operator-rh") }}
 apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
 metadata:
@@ -8,9 +10,10 @@ metadata:
     operators.coreos.com/openshift-pipelines-operator-rh.openshift-operators: ""
     {{- include "kagenti.labels" . | nindent 4 }}
 spec:
-  channel: pipelines-1.14
+  channel: latest
   installPlanApproval: Automatic
   name: openshift-pipelines-operator-rh
   source: redhat-operators
   sourceNamespace: openshift-marketplace
+{{- end }}
 {{- end }}

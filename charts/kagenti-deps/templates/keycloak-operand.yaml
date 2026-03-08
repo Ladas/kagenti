@@ -6,12 +6,21 @@ metadata:
     app: kagenti
     {{- include "kagenti.labels" . | nindent 4 }}
   annotations:
+    # Post-install hook ensures CRD exists before this CR is validated
+    # Weight 1 runs after operator subscription (weight 0)
     "helm.sh/hook": post-install, post-upgrade
     "helm.sh/hook-weight": "1"
-    "helm.sh/hook-delete-policy": before-hook-creation
+    # NOTE: No hook-delete-policy - the Keycloak CR persists across reinstalls.
+    # The RHBK operator creates keycloak-initial-admin secret with ownerReference to this CR.
+    # If CR is deleted, the secret is cascade-deleted, then recreated with NEW credentials,
+    # but PostgreSQL PVC persists with OLD credentials, causing authentication failures.
+    # See https://github.com/keycloak/keycloak/issues/35862
   name: keycloak
   namespace: {{ .Values.keycloak.namespace }}
 spec:
+  bootstrapAdmin:
+    user:
+      secret: keycloak-initial-admin
   hostname:
     strict: false
   http:
@@ -22,7 +31,7 @@ spec:
     enabled: true
   update:
     strategy: RecreateOnImageChange
-  db: 
+  db:
     host: postgres-kc
     database: postgres
     passwordSecret:
@@ -31,7 +40,7 @@ spec:
     usernameSecret:
       key: username
       name: keycloak-db-secret
-    vendor: postgres  
+    vendor: postgres
   unsupported:
     podTemplate:
       spec:
@@ -49,7 +58,7 @@ metadata:
   labels:
     {{- include "kagenti.labels" . | nindent 4 }}
   annotations:
-    openshift.io/host.generated: "true"  
+    openshift.io/host.generated: "true"
 spec:
   path: /
   port:

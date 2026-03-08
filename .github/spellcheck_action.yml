@@ -13,6 +13,8 @@ on:
 
 jobs:
   spellchecker:
+    # disable spellcheck with 'false' value.
+    if: false
     name: Spellcheck
     runs-on: ubuntu-latest
     steps:

@@ -123,6 +123,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.*
 .venv
 env/
 venv/
@@ -172,5 +173,18 @@ cython_debug/
 
 .values_override.yaml
 
-# Local testing scripts (not committed)
-local-testing/
+############## Node and React
+
+node_modules/
+.bin/
+
+# HyperShift CI credentials (covered by .env.* above)
+.env.kagenti-*
+.env.hypershift-ci
+
+# Git worktrees for parallel development
+.worktrees/
+test-results/
+
+# CVE scan results (never commit)
+.cves/

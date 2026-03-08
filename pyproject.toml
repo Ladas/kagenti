@@ -17,6 +17,9 @@ dependencies = [
     # Dependencies Ansible collections or Python code
     "kubernetes>=34",
     "PyYAML>=6.0.3",
+
+    # Dependencies for reliable logging in the authentication process.
+    "typer>=0.20.0"
 ]
 
 [project.optional-dependencies]
@@ -29,7 +32,9 @@ test = [
 
     # Kubernetes client
     "kubernetes>=34",
-    "urllib3>=1.26.0,<2.1.0",  # Pin to avoid HTTPResponse.getheaders() deprecation
+    "urllib3>=2.6.3",  # Minimum version for CVE-2025-66418, CVE-2025-66471, CVE-2026-21441 fixes
+    "protobuf>=6.33.5",  # Minimum version for CVE-2026-0994 fix
+    "pyasn1>=0.6.2",  # Minimum version for CVE-2026-23490 fix
 
     # HTTP requests
     "requests>=2.31.0",
@@ -43,6 +48,9 @@ test = [
 
     # JSON Web Token handling
     "PyJWT>=2.8.0",
+
+    # MLflow for observability tests
+    "mlflow>=3.9.0",
 ]
 
 [tool.setuptools]

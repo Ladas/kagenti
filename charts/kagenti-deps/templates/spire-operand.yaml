@@ -1,4 +1,28 @@
-{{- if and .Values.components.spire.enabled .Values.openshift }}
+{{- if and .Values.components.spire.enabled .Values.openshift (not .Values.useSpireHelmChart) }}
+{{- /*
+  ZeroTrustWorkloadIdentityManager (ZTWIM) Configuration
+
+  The ZTWIM operator requires this parent CR to exist before the individual operands
+  (SpireServer, SpireAgent, SpiffeCSIDriver, SpireOIDCDiscoveryProvider) can be configured.
+
+  This CR defines the cluster-wide SPIRE configuration including trust domain and cluster name.
+  The individual operands reference this configuration.
+*/}}
+apiVersion: operator.openshift.io/v1alpha1
+kind: ZeroTrustWorkloadIdentityManager
+metadata:
+  name: cluster
+  labels:
+    {{- include "kagenti.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install, post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  trustDomain: {{ .Values.spire.trustDomain }}
+  clusterName: agent-platform
+  bundleConfigMap: spire-bundle
+---
 apiVersion: operator.openshift.io/v1alpha1
 kind: SpiffeCSIDriver
 metadata:
@@ -8,9 +32,12 @@ metadata:
   annotations:
     "helm.sh/hook": post-install, post-upgrade
     "helm.sh/hook-weight": "1"
-    "helm.sh/hook-delete-policy": before-hook-creation    
+    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
-  agentSocketPath: /run/spire/agent-sockets/spire-agent.sock
+  # agentSocketPath should be the directory containing the socket, not the full socket path
+  # The SPIRE agent creates the socket at /tmp/spire-agent/public/spire-agent.sock inside the pod
+  # which is exposed via hostPath at /run/spire/agent-sockets/
+  agentSocketPath: /run/spire/agent-sockets
   pluginName: csi.spiffe.io
 ---
 apiVersion: operator.openshift.io/v1alpha1
@@ -22,7 +49,7 @@ metadata:
   annotations:
     "helm.sh/hook": post-install, post-upgrade
     "helm.sh/hook-weight": "1"
-    "helm.sh/hook-delete-policy": before-hook-creation    
+    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   trustDomain: {{ .Values.spire.trustDomain }}
   clusterName: agent-platform
@@ -33,15 +60,15 @@ spec:
   persistence:
     type: pvc
     size: "5Gi"
-    accessMode: ReadWriteOnce 
+    accessMode: ReadWriteOnce
   datastore:
     databaseType: sqlite3
     connectionString: "/run/spire/data/datastore.sqlite3"
-    maxOpenConns: 100 
+    maxOpenConns: 100
     maxIdleConns: 2
     connMaxLifetime: 3600
   jwtIssuer: "https://oidc-discovery-provider.{{.Values.spire.trustDomain}}"
---- 
+---
 apiVersion: operator.openshift.io/v1alpha1
 kind: SpireAgent
 metadata:
@@ -51,7 +78,7 @@ metadata:
   annotations:
     "helm.sh/hook": post-install, post-upgrade
     "helm.sh/hook-weight": "1"
-    "helm.sh/hook-delete-policy": before-hook-creation    
+    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   trustDomain: {{ .Values.spire.trustDomain }}
   clusterName: agent-platform
@@ -71,7 +98,7 @@ metadata:
   annotations:
     "helm.sh/hook": post-install, post-upgrade
     "helm.sh/hook-weight": "1"
-    "helm.sh/hook-delete-policy": before-hook-creation    
+    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   trustDomain: {{ .Values.spire.trustDomain }}
   agentSocketName: 'spire-agent.sock'

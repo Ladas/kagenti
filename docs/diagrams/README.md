@@ -150,9 +150,9 @@ echo "🎉 All diagrams generated successfully!"
 ## Integration with Documentation
 
 These diagrams are referenced in the main documentation:
-- **[Identity Demo Guide](../demo-identity.md)** - Complete authentication guide with embedded diagrams
+- **[Identity Guide](../identity-guide.md)** - Complete authentication guide with embedded diagrams
 - **[Token Exchange Examples](../../kagenti/examples/identity/token_exchange.md)** - Detailed implementation examples
 
 ## Related Documentation
-- **[Personas and Roles](../../PERSONAS_AND_ROLES.md)** - User roles and access levels
+- **[Personas and Roles](../../PERSONAS_AND_ROLES.md)** - Developer, operator, and end user personas
 - **[Kagenti Identity PDF](../2025-10.Kagenti-Identity.pdf)** - High-level architectural concepts

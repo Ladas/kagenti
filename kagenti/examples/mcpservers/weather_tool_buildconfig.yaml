@@ -1,0 +1,52 @@
+# OpenShift BuildConfig for weather-tool
+# This replaces AgentBuild for building MCP tools on OpenShift.
+# BuildConfig uses the native OpenShift build system instead of Tekton pipelines.
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: weather-tool
+  namespace: team1
+  labels:
+    app.kubernetes.io/name: weather-tool
+    kagenti.io/type: tool
+    kagenti.io/protocol: mcp
+    kagenti.io/framework: Python
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: weather-tool
+  namespace: team1
+  labels:
+    app.kubernetes.io/name: weather-tool
+    kagenti.io/type: tool
+    kagenti.io/protocol: mcp
+    kagenti.io/framework: Python
+spec:
+  source:
+    type: Git
+    git:
+      # TODO: Revert to kagenti/agent-examples after Dockerfile fix merged
+      # TODO: Revert to kagenti/agent-examples after PR#114 merged
+      uri: https://github.com/Ladas/agent-examples
+      ref: genai-autoinstrumentation
+    contextDir: mcp/weather_tool
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: weather-tool:v0.0.1
+  triggers:
+    # Manual trigger only - build starts when explicitly triggered
+    - type: ConfigChange
+  resources:
+    limits:
+      cpu: "2"
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi

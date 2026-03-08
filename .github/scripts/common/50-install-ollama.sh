@@ -13,7 +13,7 @@ fi
 
 # Download Ollama install script with retry logic for rate limiting
 INSTALL_SCRIPT=$(mktemp)
-trap "rm -f $INSTALL_SCRIPT" EXIT
+trap 'rm -f "$INSTALL_SCRIPT"' EXIT
 
 MAX_RETRIES=5
 RETRY_COUNT=0
@@ -48,6 +48,27 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     fi
 done
 
-# Execute the install script
-bash "$INSTALL_SCRIPT"
-log_success "Ollama installed"
+# Execute the install script with retry logic
+# The Ollama install script downloads from GitHub which can have rate limiting
+INSTALL_RETRY_COUNT=0
+INSTALL_MAX_RETRIES=5
+INSTALL_BACKOFF=10
+
+while [ $INSTALL_RETRY_COUNT -lt $INSTALL_MAX_RETRIES ]; do
+    log_info "Running Ollama install script (attempt $((INSTALL_RETRY_COUNT + 1))/$INSTALL_MAX_RETRIES)"
+
+    if bash "$INSTALL_SCRIPT"; then
+        log_success "Ollama installed"
+        exit 0
+    fi
+
+    INSTALL_RETRY_COUNT=$((INSTALL_RETRY_COUNT + 1))
+    if [ $INSTALL_RETRY_COUNT -lt $INSTALL_MAX_RETRIES ]; then
+        WAIT_TIME=$((INSTALL_BACKOFF * INSTALL_RETRY_COUNT))
+        log_warn "Ollama install failed - retrying in ${WAIT_TIME}s (attempt $INSTALL_RETRY_COUNT/$INSTALL_MAX_RETRIES)"
+        sleep $WAIT_TIME
+    else
+        log_error "Ollama install failed after $INSTALL_MAX_RETRIES attempts"
+        exit 1
+    fi
+done

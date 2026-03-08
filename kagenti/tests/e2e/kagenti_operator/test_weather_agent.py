@@ -11,7 +11,6 @@ from kubernetes.client.exceptions import ApiException
 class TestWeatherAgent:
     """Test weather-service agent deployment in kagenti-operator mode."""
 
-    @pytest.mark.requires_features(["kagentiOperator"])
     def test_deployment_exists(self, k8s_apps_client):
         """Verify weather-service deployment exists."""
         try:
@@ -22,7 +21,6 @@ class TestWeatherAgent:
         except ApiException as e:
             pytest.fail(f"weather-service deployment not found: {e}")
 
-    @pytest.mark.requires_features(["kagentiOperator"])
     def test_deployment_ready(self, k8s_apps_client):
         """Verify weather-service deployment is ready."""
         deployment = k8s_apps_client.read_namespaced_deployment(
@@ -32,11 +30,10 @@ class TestWeatherAgent:
         desired_replicas = deployment.spec.replicas or 1
         ready_replicas = deployment.status.ready_replicas or 0
 
-        assert (
-            ready_replicas >= desired_replicas
-        ), f"weather-service not ready: {ready_replicas}/{desired_replicas} replicas"
+        assert ready_replicas >= desired_replicas, (
+            f"weather-service not ready: {ready_replicas}/{desired_replicas} replicas"
+        )
 
-    @pytest.mark.requires_features(["kagentiOperator"])
     def test_pods_running(self, k8s_client, k8s_apps_client):
         """Verify weather-service pods are running."""
         deployment = k8s_apps_client.read_namespaced_deployment(
@@ -54,11 +51,10 @@ class TestWeatherAgent:
         assert len(pods.items) > 0, "No weather-service pods found"
 
         for pod in pods.items:
-            assert (
-                pod.status.phase == "Running"
-            ), f"Pod {pod.metadata.name} not running: {pod.status.phase}"
+            assert pod.status.phase == "Running", (
+                f"Pod {pod.metadata.name} not running: {pod.status.phase}"
+            )
 
-    @pytest.mark.requires_features(["kagentiOperator"])
     def test_service_exists(self, k8s_client, weather_service_name):
         """Verify weather-service service exists with correct name."""
         try:

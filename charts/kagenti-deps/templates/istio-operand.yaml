@@ -14,6 +14,15 @@ spec:
   values:
     pilot:
       trustedZtunnelNamespace: "{{ .Values.istio.ztunnel.namespace }}"
+      # Reduce default resource requests to fit on resource-constrained
+      # dev clusters with limited CPUs.
+      resources:
+        requests:
+          cpu: 50m
+          memory: 256Mi
+        limits:
+          cpu: 250m
+          memory: 512Mi
     profile: ambient
     meshConfig:
       discoverySelectors:
@@ -46,5 +55,5 @@ metadata:
     "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   namespace: "{{ .Values.istio.ztunnel.namespace }}"
-  profile: ambient      
+  profile: ambient
 {{- end }}

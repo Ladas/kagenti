@@ -1,6 +1,11 @@
 # Kagenti installation configuration
 
-#################################################################### 
+####################################################################
+# Domain name - configurable for non-Kind deployments
+####################################################################
+domain: localtest.me
+
+####################################################################
 # Secrets and value files
 ####################################################################
 secrets:
@@ -9,7 +14,7 @@ secrets:
 
 values_files: {}
 
-#################################################################### 
+####################################################################
 # Kubectl templates
 ####################################################################
 gatewayApi:
@@ -24,23 +29,17 @@ tekton:
   enabled: false
   version: v0.66.0
 
-toolhiveCRDs:
+shipwright:
   enabled: false
-  version: 0.0.60
-
-toolhiveOperator:
-  enabled: false
-  version: 0.5.3
-  release_name: "toolhive-operator"
-  namespace: "toolhive-system"
+  version: v0.14.0
 
 kiali:
   enabled: false
-  version: release-1.28  
+  version: release-1.28
 
 charts:
-  #################################################################### 
-  # kagenti-deps 
+  ####################################################################
+  # kagenti-deps
   ####################################################################
   kagenti-deps:
     enabled: true
@@ -76,27 +75,36 @@ charts:
           enabled: false
         ingressGateway:
           enabled: false
-        toolhive:
+        shipwright:
           enabled: false
-      # components settings    
+      # components settings
       containerRegistry:
         namespace: cr-system
-        name: registry  
+        name: registry
 
-  #################################################################### 
+  ####################################################################
   # mcp-gateway chart
-  ####################################################################        
+  ####################################################################
   mcpGateway:
     enabled: false
     namespace: mcp-system
-    version: 0.4.0
+    version: 0.5.0
     values:
+      # See https://github.com/Kuadrant/mcp-gateway/blob/main/charts/mcp-gateway/values.yaml
+      # for an example Helm values file for this chart.
       image:
-        tag: v0.4
+        # Container image tag to use for the broker-router
+        tag: v0.5.0
+      imageController:
+        # Container image tag to use for the controller
+        tag: v0.5.0
+      broker:
+        # Start an instance of the broker
+        create: true
 
-  #################################################################### 
-  # kagenti 
-  ####################################################################        
+  ####################################################################
+  # kagenti
+  ####################################################################
   kagenti:
     enabled: true
     # chart: path to a local chart or chart reference (e.g. repo/chartname)
@@ -119,20 +127,20 @@ charts:
         ui:
           enabled: false
         istio:
-          enabled: false  
+          enabled: false
 
-  #################################################################### 
-  # istio 
-  ####################################################################    
+  ####################################################################
+  # istio
+  ####################################################################
   istio:
     enabled: false
     namespace: istio-system
     version: 1.28.0
     values: {}
 
-  #################################################################### 
+  ####################################################################
   # spire
-  ####################################################################    
+  ####################################################################
   spire:
     enabled: false
     namespace: spire-mgmt
@@ -150,11 +158,11 @@ charts:
             create: true
           ingressControllerType: ""
           clusterName: agent-platform
-          trustDomain: localtest.me
+          trustDomain: "{{ domain | default('localtest.me') }}"
           caSubject:
             country: US
             organization: AgenticPlatformDemo
-            commonName: localtest.me
+            commonName: "{{ domain | default('localtest.me') }}"
 
       spire-server:
         tornjak:
@@ -183,7 +191,7 @@ charts:
           tag: v2.0.0
         ingress:
           enabled: true
-        apiServerURL: http://spire-tornjak-api.localtest.me:8080
+        apiServerURL: "http://spire-tornjak-api.{{ domain | default('localtest.me') }}:8080"
         service:
           type: ClusterIP
           port: 3000
@@ -195,7 +203,7 @@ charts:
             cpu: 100m
             memory: 512Mi
 
-#################################################################### 
+####################################################################
 # Dev cluster setup (Kind)
 ####################################################################
 
@@ -204,6 +212,9 @@ kind_cluster_name: kagenti
 kind_images_preload: false
 # docker or podman
 container_engine: docker
+# Minimum resources for container runtime (preflight check)
+kind_min_memory_gb: 16
+kind_min_cpus: 4
 
 # Paths to configs in the deployments/scripts directory (relative to playbook_dir)
 kind_config: "./kind/kind-config.yaml"

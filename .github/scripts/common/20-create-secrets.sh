@@ -10,21 +10,24 @@ source "$SCRIPT_DIR/../lib/logging.sh"
 
 log_step "20" "Creating secret values"
 
-SECRET_FILE="$REPO_ROOT/deployments/envs/.secret_values.yaml"
+# Use MAIN_REPO_ROOT for secrets (worktree-aware - secrets stay in main repo)
+SECRET_FILE="$MAIN_REPO_ROOT/deployments/envs/.secret_values.yaml"
 
-# Check if secrets already exist
+# Check if secrets already exist (in main repo)
 if [ -f "$SECRET_FILE" ]; then
-    log_info "Secrets file already exists, skipping"
+    log_info "Secrets file already exists at $SECRET_FILE, skipping"
     exit 0
 fi
 
-# Create directory
-mkdir -p "$REPO_ROOT/deployments/envs"
+# Create directory in main repo (not worktree)
+mkdir -p "$MAIN_REPO_ROOT/deployments/envs"
 
 if [ "$IS_CI" = true ]; then
     log_info "Creating CI test secrets"
+    # Use real OPENAI_API_KEY from GitHub secrets if available
+    OPENAI_KEY="${OPENAI_API_KEY:-ci-test-openai-key}"
     cat > "$SECRET_FILE" <<EOF
-# CI secret values (fake values for testing)
+# CI secret values
 global:
   jwt_key: "ci-test-jwt-key"
   db_password: "ci-test-db-password"
@@ -36,7 +39,7 @@ kagenti:
 secrets:
   githubUser: "ci-test-user"
   githubToken: "ci-test-token"
-  openaiApiKey: "ci-test-openai-key"
+  openaiApiKey: "${OPENAI_KEY}"
   slackBotToken: "ci-test-slack-token"
   adminSlackBotToken: "ci-test-admin-slack-token"
 EOF

@@ -19,6 +19,21 @@ if [ -z "$POD_NAME" ]; then
     exit 1
 fi
 
+# Wait for the agent app to be ready inside the pod (not just pod Running)
+# The pod may be Running but the Python app (uvicorn) needs time to start
+log_info "Waiting for weather-service app to be ready in pod $POD_NAME..."
+for i in {1..30}; do
+    if kubectl exec -n team1 "$POD_NAME" -- curl -s http://localhost:8000/.well-known/agent-card.json >/dev/null 2>&1; then
+        log_success "Weather-service app is ready"
+        break
+    fi
+    if [ $i -eq 30 ]; then
+        log_error "Weather-service app not ready after 30s"
+        kubectl logs -n team1 "$POD_NAME" --tail=20
+    fi
+    sleep 1
+done
+
 log_info "Port-forwarding weather-service pod: $POD_NAME -> localhost:8000"
 
 # Start port-forward in background
@@ -31,9 +46,9 @@ else
     echo $AGENT_PORT_FORWARD_PID > /tmp/port-forward-agent.pid
 fi
 
-# Wait for agent port-forward to be ready
-for i in {1..10}; do
-    if curl -s http://localhost:8000/health >/dev/null 2>&1 || curl -s http://localhost:8000/ >/dev/null 2>&1; then
+# Wait for port-forward to be ready
+for _ in {1..10}; do
+    if curl -s http://localhost:8000/.well-known/agent-card.json >/dev/null 2>&1; then
         log_success "Agent port-forward is ready (localhost:8000)"
         break
     fi
@@ -52,17 +67,82 @@ KEYCLOAK_PORT_FORWARD_PID=$!
 
 if [ "$IS_CI" = true ]; then
     echo "KEYCLOAK_PORT_FORWARD_PID=$KEYCLOAK_PORT_FORWARD_PID" >> $GITHUB_ENV
+    echo "KEYCLOAK_URL=http://localhost:8081" >> $GITHUB_ENV
 else
     echo $KEYCLOAK_PORT_FORWARD_PID > /tmp/port-forward-keycloak.pid
+    export KEYCLOAK_URL="http://localhost:8081"
 fi
 
 # Wait for Keycloak port-forward to be ready
-for i in {1..10}; do
+for _ in {1..10}; do
     if curl -s http://localhost:8081/health >/dev/null 2>&1 || curl -s http://localhost:8081/ >/dev/null 2>&1; then
         log_success "Keycloak port-forward is ready (localhost:8081)"
         break
     fi
     sleep 1
 done
+
+# ============================================================================
+# Port-forward kagenti-backend to localhost:8002
+# Required for UI agent/tool discovery E2E tests
+# ============================================================================
+
+log_info "Port-forwarding kagenti-backend service -> localhost:8002"
+
+# Check if backend is deployed
+if kubectl get svc -n kagenti-system kagenti-backend >/dev/null 2>&1; then
+    kubectl port-forward -n kagenti-system svc/kagenti-backend 8002:8000 > /tmp/port-forward-backend.log 2>&1 &
+    BACKEND_PORT_FORWARD_PID=$!
+
+    if [ "$IS_CI" = true ]; then
+        echo "BACKEND_PORT_FORWARD_PID=$BACKEND_PORT_FORWARD_PID" >> $GITHUB_ENV
+        echo "KAGENTI_BACKEND_URL=http://localhost:8002" >> $GITHUB_ENV
+    else
+        echo $BACKEND_PORT_FORWARD_PID > /tmp/port-forward-backend.pid
+    fi
+
+    # Wait for backend port-forward to be ready
+    for _ in {1..10}; do
+        if curl -s http://localhost:8002/health >/dev/null 2>&1 || curl -s http://localhost:8002/api/v1/ >/dev/null 2>&1; then
+            log_success "Backend port-forward is ready (localhost:8002)"
+            break
+        fi
+        sleep 1
+    done
+else
+    log_info "kagenti-backend not deployed, skipping port-forward"
+fi
+
+# ============================================================================
+# Port-forward MLflow to localhost:5000
+# Required for MLflow trace validation E2E tests
+# ============================================================================
+
+log_info "Port-forwarding MLflow service -> localhost:5000"
+
+# Check if MLflow is deployed
+if kubectl get svc -n kagenti-system mlflow >/dev/null 2>&1; then
+    kubectl port-forward -n kagenti-system svc/mlflow 5000:5000 > /tmp/port-forward-mlflow.log 2>&1 &
+    MLFLOW_PORT_FORWARD_PID=$!
+
+    if [ "$IS_CI" = true ]; then
+        echo "MLFLOW_PORT_FORWARD_PID=$MLFLOW_PORT_FORWARD_PID" >> $GITHUB_ENV
+        echo "MLFLOW_URL=http://localhost:5000" >> $GITHUB_ENV
+    else
+        echo $MLFLOW_PORT_FORWARD_PID > /tmp/port-forward-mlflow.pid
+        export MLFLOW_URL="http://localhost:5000"
+    fi
+
+    # Wait for MLflow port-forward to be ready
+    for _ in {1..10}; do
+        if curl -s http://localhost:5000/health >/dev/null 2>&1 || curl -s http://localhost:5000/version >/dev/null 2>&1; then
+            log_success "MLflow port-forward is ready (localhost:5000)"
+            break
+        fi
+        sleep 1
+    done
+else
+    log_info "MLflow not deployed, skipping port-forward"
+fi
 
 log_success "All port-forwards started"

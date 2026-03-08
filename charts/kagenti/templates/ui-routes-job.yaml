@@ -25,9 +25,9 @@ rules:
 - apiGroups: ["route.openshift.io"]
   resources: ["routes"]
   verbs: ["get", "list"]
-- apiGroups: [""] 
+- apiGroups: [""]
   resources: ["configmaps"]
-  verbs: ["create", "get", "patch", "update"] 
+  verbs: ["create", "get", "patch", "update"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -57,7 +57,7 @@ metadata:
     {{- include "kagenti.labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade, pre-delete
-    "helm.sh/hook-weight": "-5" 
+    "helm.sh/hook-weight": "-5"
     "helm.sh/hook-delete-policy": before-hook-creation
 data:
   process_routes.sh: |
@@ -86,9 +86,9 @@ data:
             fi
             # if route not found it should mean component was not installed - return empty host
             if [[ $ELAPSED_TIME -ge $TIMEOUT_SECONDS ]]; then
-                #echo "!! Error: Timed out after $TIMEOUT_SECONDS seconds." >&2
-                #return 1
+                echo "    Route '$ROUTE_NAME' not found after ${TIMEOUT_SECONDS}s — skipping." >&2
                 printf ""
+                return 0
             fi
             sleep $CHECK_INTERVAL_SECONDS
             ELAPSED_TIME=$((ELAPSED_TIME + CHECK_INTERVAL_SECONDS))
@@ -110,10 +110,11 @@ data:
       "kagenti-system,mcp-inspector,true,MCP_INSPECTOR_URL"
       "kagenti-system,mcp-proxy,true,MCP_PROXY_FULL_ADDRESS"
       "kagenti-system,phoenix,true,TRACES_DASHBOARD_URL"
+      "kagenti-system,kagenti-api,true,API_URL"
       "istio-system,kiali,true,NETWORK_TRAFFIC_DASHBOARD_URL"
       "keycloak,keycloak,true,KEYCLOAK_CONSOLE_URL"
     )
-    
+
     output_keys=()
     output_values=()
 
@@ -143,10 +144,10 @@ data:
 
     echo
     echo "--- Completed Route Processing ---"
-    
+
     # --- Generate and Apply ConfigMap ---
     echo "--- Generating and Applying ConfigMap ---"
-    
+
     configmap_yaml=$(cat <<EOF
     apiVersion: v1
     kind: ConfigMap
@@ -162,7 +163,7 @@ data:
       configmap_yaml+=$'\n'
       configmap_yaml+="  $key: \"$value\""
     done
-    
+
     echo "$configmap_yaml" | kubectl apply -f -
     if [[ $? -eq 0 ]]; then
         echo "ConfigMap '$CONFIGMAP_NAME' applied successfully in namespace '$CONFIGMAP_NAMESPACE'."
@@ -182,8 +183,6 @@ metadata:
     "helm.sh/hook": pre-install, pre-upgrade
     "helm.sh/hook-weight": "1"
     "helm.sh/hook-delete-policy": hook-succeeded
-  labels:
-    {{- include "kagenti.labels" . | nindent 4 }}
 spec:
   template:
     spec:

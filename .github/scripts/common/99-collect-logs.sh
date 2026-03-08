@@ -22,6 +22,18 @@ echo "=== Weather Service Logs ==="
 kubectl logs -n team1 deployment/weather-service --tail=50 --all-containers=true || true
 
 echo ""
+echo "=== Shipwright Build Status ==="
+kubectl get builds -n team1 || true
+kubectl get buildruns -n team1 || true
+
+echo ""
+echo "=== Shipwright Build Logs (if exists) ==="
+BUILD_POD=$(kubectl get pods -n team1 -l build.shipwright.io/name=weather-service --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1].metadata.name}' 2>/dev/null || echo "")
+if [ -n "$BUILD_POD" ]; then
+    kubectl logs -n team1 "$BUILD_POD" --all-containers=true --tail=100 || true
+fi
+
+echo ""
 echo "=== Keycloak Logs (if exists) ==="
 kubectl logs -n keycloak deployment/keycloak --tail=30 || kubectl logs -n keycloak statefulset/keycloak --tail=30 || true
 

@@ -1,10 +1,18 @@
-{{- if and .Values.components.spire.enabled (not .Values.openshift) }}
+{{- /* Create SPIRE routes for Kubernetes or when using Helm chart on OpenShift (OCP < 4.19) */}}
+{{- if and .Values.components.spire.enabled (or (not .Values.openshift) .Values.useSpireHelmChart) }}
 apiVersion: v1
 kind: Namespace
 metadata:
   name: {{ .Values.spire.namespace }}
   labels:
     {{- include "kagenti.labels" . | nindent 4 }}
+{{- if .Values.openshift }}
+    # Pod Security Standards labels for OpenShift
+    # Required for SPIFFE CSI driver to mount workload API sockets
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged
+{{- end }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -20,7 +28,7 @@ spec:
     - name: http
       namespace: kagenti-system
   hostnames:
-    - "spire-oidc.localtest.me"
+    - "spire-oidc.{{ .Values.domain }}"
   rules:
     - matches:
         - path:
@@ -44,7 +52,7 @@ spec:
     - name: http
       namespace: kagenti-system
   hostnames:
-    - "spire-tornjak-api.localtest.me"
+    - "spire-tornjak-api.{{ .Values.domain }}"
   rules:
     - matches:
         - path:
@@ -68,7 +76,7 @@ spec:
     - name: http
       namespace: kagenti-system
   hostnames:
-    - "spire-tornjak-ui.localtest.me"
+    - "spire-tornjak-ui.{{ .Values.domain }}"
   rules:
     - matches:
         - path:
