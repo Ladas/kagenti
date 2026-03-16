@@ -1634,8 +1634,7 @@
       release_namespace: "{{ (charts['kagenti'] | default({})).get('namespace', 'kagenti-system') }}"
       state: present
       create_namespace: false
-      wait: true
-      timeout: "{{ helm_wait_timeout }}s"
+      wait: false
       values: >-
         {{ (((charts['kagenti'] | default({})).get('values')) | default({}))
           | combine({'ui': {'frontend': {'tag': kagenti_latest_tag}, 'backend': {'tag': kagenti_latest_tag}}}, recursive=True)
@@ -1653,6 +1652,220 @@
     register: kagenti_helm_result
     until: kagenti_helm_result is succeeded
 
+  # Wait for the operator to become ready (it creates backend, UI, and other resources).
+  # With wait: false on helm install, the chart resources are being created asynchronously.
+  - name: Wait for kagenti-controller-manager deployment
+    command: >-
+      kubectl rollout status deployment/kagenti-controller-manager
+      -n {{ (charts['kagenti'] | default({})).get('namespace', 'kagenti-system') }}
+      --timeout=300s
+    retries: 3
+    delay: 10
+    register: operator_rollout
+    until: operator_rollout.rc == 0
+    failed_when: false
+
+  - name: Wait for kagenti-ui deployment
+    command: >-
+      kubectl rollout status deployment/kagenti-ui
+      -n {{ (charts['kagenti'] | default({})).get('namespace', 'kagenti-system') }}
+      --timeout=300s
+    retries: 3
+    delay: 10
+    register: ui_rollout
+    until: ui_rollout.rc == 0
+    failed_when: false
+
+  # TODO: Move github-clone-step fixes to kagenti-operator.
+  # The kagenti-operator creates the github-clone-step ConfigMap for Tekton pipelines.
+  # On OpenShift with Istio ambient mode:
+  # 1. HOME must be set to /tekton/home (git-init can't write to / on OpenShift)
+  # 2. A 30s delay is needed for ztunnel to register the workload before DNS queries
+  #    (ztunnel has a 5s timeout waiting for xds workload info from istiod)
+  # The operator should include these fixes in the ConfigMap definition.
+  # For now, we patch it in the installer as a workaround.
+  - name: Wait for kagenti-operator to create github-clone-step ConfigMap
+    command: kubectl get configmap github-clone-step -n {{ (charts['kagenti'] | default({})).get('namespace', 'kagenti-system') }}
+    register: github_clone_step_check
+    retries: 60
+    delay: 10
+    until: github_clone_step_check.rc == 0
+    changed_when: false
+    failed_when: false
+    when: enable_openshift | default(false)
+
+  - name: Skip github-clone-step patch if ConfigMap not found (operator may not be deployed)
+    debug:
+      msg: "github-clone-step ConfigMap not found after retries — skipping patch (non-critical for sandbox agents)"
+    when:
+      - enable_openshift | default(false)
+      - github_clone_step_check is defined
+      - github_clone_step_check.rc is defined
+      - github_clone_step_check.rc != 0
+
+  - name: Patch github-clone-step ConfigMap for OpenShift and Istio ambient mode
+    kubernetes.core.k8s:
+      api_version: v1
+      kind: ConfigMap
+      name: github-clone-step
+      namespace: "{{ (charts['kagenti'] | default({})).get('namespace', 'kagenti-system') }}"
+      definition:
+        data:
+          task-spec.yaml: |
+            params:
+              - name: GITHUB_TOKEN
+                type: string
+                description: The Git repository URL with the token
+                default: ""
+              - name: repo-url
+                type: string
+                description: The Git repository URL without the token
+              - name: revision
+                type: string
+                description: The Git revision to checkout
+                default: "main"
+            steps:
+              - name: git-clone
+                image: ghcr.io/tektoncd/github.com/tektoncd/pipeline/cmd/git-init:latest
+                env:
+                  - name: HOME
+                    value: /tekton/home
+                script: |
+                  #!/bin/sh
+                  # Wait for Istio ambient mesh ztunnel to register this workload.
+                  # Without this delay, DNS queries fail because ztunnel times out
+                  # waiting for workload info from istiod (xds).
+                  echo "Waiting 30s for Istio ambient mesh to register this workload..."
+                  sleep 30
+                  /ko-app/git-init -url https://$(params.repo-url) -revision $(params.revision) -path /workspace/source
+              - name: list-dir
+                image: public.ecr.aws/docker/library/alpine:latest
+                workingDir: $(workspaces.source.path)
+                script: |
+                    echo "Listing contents of workspace root ($(workspaces.source.path)): "
+                    ls -la
+
+            workspaces:
+              - name: source
+      merge_type: merge
+    when:
+      - enable_openshift | default(false)
+      - github_clone_step_check is defined
+      - github_clone_step_check.rc is defined
+      - github_clone_step_check.rc == 0
+
   when:
   - (charts['kagenti'] | default({})).get('enabled', false) | bool
   - (charts['kagenti'] | default({})).get('chart') is defined
+
+# TODO: Move internal-registry-secret creation to kagenti-operator or kagenti helm chart.
+# The kagenti-operator creates AgentBuilds with Tekton pipelines that push images
+# to the OpenShift internal registry. The buildah step needs a dockerconfigjson-format
+# secret with registry credentials. OpenShift auto-creates builder-dockercfg secrets
+# but in dockercfg format, which buildah cannot use directly.
+# For now, we create the internal-registry-secret in each agent namespace as a workaround.
+- name: Create internal-registry-secret in agent namespaces for OpenShift
+  block:
+    - name: Create internal-registry-secret from builder SA token
+      shell: |
+        for ns in {{ (((charts['kagenti'] | default({})).get('values')) | default({})).get('agentNamespaces', []) | join(' ') }}; do
+          # Get builder dockercfg and convert to dockerconfigjson format
+          DOCKERCFG=$(kubectl get secret -n $ns -o name | grep builder-dockercfg | head -1 | xargs -I {} kubectl get {} -n $ns -o jsonpath='{.data.\.dockercfg}' | base64 -d)
+          if [ -n "$DOCKERCFG" ]; then
+            DOCKERCONFIGJSON=$(echo "{\"auths\": $DOCKERCFG}" | base64 | tr -d '\n')
+            kubectl apply -f - <<EOF
+        apiVersion: v1
+        kind: Secret
+        metadata:
+          name: internal-registry-secret
+          namespace: $ns
+        type: kubernetes.io/dockerconfigjson
+        data:
+          .dockerconfigjson: $DOCKERCONFIGJSON
+        EOF
+            echo "Created internal-registry-secret in $ns"
+          else
+            echo "No builder-dockercfg found in $ns, skipping"
+          fi
+        done
+      args:
+        executable: /bin/bash
+  when:
+    - enable_openshift | default(false)
+    - (((charts['kagenti'] | default({})).get('values')) | default({})).get('agentNamespaces', []) | length > 0
+
+# TODO: Move spiffe-helper-config ConfigMap creation to kagenti-operator.
+# Agent/tool workloads with SPIFFE identity injection expect this ConfigMap for the spiffe-helper sidecar.
+# For now, we create it in each agent namespace.
+- name: Create spiffe-helper-config ConfigMap in agent namespaces
+  block:
+    - name: Apply spiffe-helper-config ConfigMap
+      shell: |
+        for ns in {{ (((charts['kagenti'] | default({})).get('values')) | default({})).get('agentNamespaces', []) | join(' ') }}; do
+          kubectl apply -n $ns -f - <<EOF
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: spiffe-helper-config
+        data:
+          helper.conf: |
+            agent_address = "/spiffe-workload-api/spire-agent.sock"
+            cmd = ""
+            cmd_args = ""
+            svid_file_name = "/opt/svid.pem"
+            svid_key_file_name = "/opt/svid_key.pem"
+            svid_bundle_file_name = "/opt/svid_bundle.pem"
+            jwt_svids = [{jwt_audience="kagenti", jwt_svid_file_name="/opt/jwt_svid.token"}]
+            jwt_svid_file_mode = 0644
+            include_federated_domains = true
+        EOF
+          echo "Created spiffe-helper-config in $ns"
+        done
+      args:
+        executable: /bin/bash
+  when:
+    - (((charts['kagenti'] | default({})).get('values')) | default({})).get('agentNamespaces', []) | length > 0
+
+# TODO: Move OAuth secret job ordering to kagenti helm chart.
+# The kagenti-ui-oauth-secret-job needs the OpenShift Route to exist before it runs,
+# because it reads the Route host to construct the OAuth callback URL. Currently,
+# the Job and Route are created in parallel, causing a race condition where the Job
+# may fail with "route not found" error. The Job eventually succeeds on retry, but
+# the UI deployment may have already started with missing/stale OAuth credentials.
+#
+# Proper fix in charts/kagenti/templates/:
+# 1. Add helm hook annotation to oauth-secret-job.yaml:
+#    "helm.sh/hook": post-install,post-upgrade
+#    "helm.sh/hook-weight": "10"  # Higher than Route weight
+# 2. Ensure Route has lower hook-weight or is a regular resource (not a hook)
+# 3. This guarantees Route exists before Job runs
+#
+# For now, we restart the UI deployment after the chart installs to pick up the
+# OAuth secret that was created by the (eventually successful) Job.
+- name: Restart kagenti-ui to pick up OAuth secret on OpenShift
+  block:
+    - name: Wait for OAuth secret job to complete
+      command: >-
+        kubectl wait --for=condition=complete job
+        -l app.kubernetes.io/component=oauth-secret
+        -n {{ (charts['kagenti'] | default({})).get('namespace', 'kagenti-system') }}
+        --timeout=120s
+      register: oauth_job_wait
+      failed_when: false
+      changed_when: false
+
+    - name: Restart kagenti-ui deployment
+      command: >-
+        kubectl rollout restart deployment/kagenti-ui
+        -n {{ (charts['kagenti'] | default({})).get('namespace', 'kagenti-system') }}
+      failed_when: false
+
+    - name: Wait for kagenti-ui rollout to complete
+      command: >-
+        kubectl rollout status deployment/kagenti-ui
+        -n {{ (charts['kagenti'] | default({})).get('namespace', 'kagenti-system') }}
+        --timeout=120s
+      failed_when: false
+  when:
+    - enable_openshift | default(false)
+    - (charts['kagenti'] | default({})).get('enabled', false) | bool
