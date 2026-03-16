@@ -114,6 +114,13 @@ spec:
                   optional: true
             - name: ENABLE_AUTH
               value: "{{ .Values.ui.auth.enabled }}"
+            # Feature flags
+            - name: KAGENTI_FEATURE_FLAG_SANDBOX
+              value: "{{ .Values.featureFlags.sandbox }}"
+            - name: KAGENTI_FEATURE_FLAG_INTEGRATIONS
+              value: "{{ .Values.featureFlags.integrations }}"
+            - name: KAGENTI_FEATURE_FLAG_TRIGGERS
+              value: "{{ .Values.featureFlags.triggers }}"
             - name: KEYCLOAK_URL
               value: {{ .Values.keycloak.url | quote }}
             # Dashboard URLs from ConfigMap (populated by ui-routes-job)

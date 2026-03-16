@@ -5,6 +5,7 @@ import { Routes, Route } from 'react-router-dom';
 
 import { AppLayout } from './components/AppLayout';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { useFeatureFlags } from './hooks/useFeatureFlags';
 import { HomePage } from './pages/HomePage';
 import { AgentCatalogPage } from './pages/AgentCatalogPage';
 import { AgentDetailPage } from './pages/AgentDetailPage';
@@ -32,8 +33,10 @@ import { SessionGraphPage } from './pages/SessionGraphPage';
 import { TriggerManagementPage } from './pages/TriggerManagementPage';
 
 function App() {
+  const features = useFeatureFlags();
+
   return (
-    <AppLayout>
+    <AppLayout features={features}>
       <Routes>
         {/* Public route - accessible to everyone */}
         <Route path="/" element={<HomePage />} />
@@ -103,46 +106,21 @@ function App() {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/integrations"
-          element={
-            <ProtectedRoute>
-              <IntegrationsPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/integrations/add"
-          element={
-            <ProtectedRoute>
-              <AddIntegrationPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/integrations/:namespace/:name"
-          element={
-            <ProtectedRoute>
-              <IntegrationDetailPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/sessions"
-          element={
-            <ProtectedRoute>
-              <SessionsTablePage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/triggers"
-          element={
-            <ProtectedRoute>
-              <TriggerManagementPage />
-            </ProtectedRoute>
-          }
-        />
+        {features.integrations && (
+          <>
+            <Route path="/integrations" element={<ProtectedRoute><IntegrationsPage /></ProtectedRoute>} />
+            <Route path="/integrations/add" element={<ProtectedRoute><AddIntegrationPage /></ProtectedRoute>} />
+            <Route path="/integrations/:namespace/:name" element={<ProtectedRoute><IntegrationDetailPage /></ProtectedRoute>} />
+          </>
+        )}
+        {features.sandbox && (
+          <>
+            <Route path="/sessions" element={<ProtectedRoute><SessionsTablePage /></ProtectedRoute>} />
+          </>
+        )}
+        {features.triggers && (
+          <Route path="/triggers" element={<ProtectedRoute><TriggerManagementPage /></ProtectedRoute>} />
+        )}
         <Route
           path="/mcp-gateway"
           element={
@@ -183,62 +161,17 @@ function App() {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/sandbox"
-          element={
-            <ProtectedRoute>
-              <SandboxPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/sandbox/create"
-          element={
-            <ProtectedRoute>
-              <SandboxCreatePage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/sandbox/sessions"
-          element={
-            <ProtectedRoute>
-              <SessionsTablePage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/sandbox/graph"
-          element={
-            <ProtectedRoute>
-              <SessionGraphPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/sandboxes"
-          element={
-            <ProtectedRoute>
-              <SandboxesPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/sandbox/files/:namespace/:agentName/:contextId"
-          element={
-            <ProtectedRoute>
-              <FileBrowser />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/sandbox/files/:namespace/:agentName"
-          element={
-            <ProtectedRoute>
-              <FileBrowser />
-            </ProtectedRoute>
-          }
-        />
+        {features.sandbox && (
+          <>
+            <Route path="/sandbox" element={<ProtectedRoute><SandboxPage /></ProtectedRoute>} />
+            <Route path="/sandbox/create" element={<ProtectedRoute><SandboxCreatePage /></ProtectedRoute>} />
+            <Route path="/sandbox/sessions" element={<ProtectedRoute><SessionsTablePage /></ProtectedRoute>} />
+            <Route path="/sandbox/graph" element={<ProtectedRoute><SessionGraphPage /></ProtectedRoute>} />
+            <Route path="/sandboxes" element={<ProtectedRoute><SandboxesPage /></ProtectedRoute>} />
+            <Route path="/sandbox/files/:namespace/:agentName/:contextId" element={<ProtectedRoute><FileBrowser /></ProtectedRoute>} />
+            <Route path="/sandbox/files/:namespace/:agentName" element={<ProtectedRoute><FileBrowser /></ProtectedRoute>} />
+          </>
+        )}
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </AppLayout>

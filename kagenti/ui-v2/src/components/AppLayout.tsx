@@ -48,11 +48,18 @@ import {
 import { useAuth, useTheme } from '@/contexts';
 import type { ThemeMode } from '@/contexts';
 
-interface AppLayoutProps {
-  children: React.ReactNode;
+interface FeatureFlags {
+  sandbox: boolean;
+  integrations: boolean;
+  triggers: boolean;
 }
 
-export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
+interface AppLayoutProps {
+  children: React.ReactNode;
+  features?: FeatureFlags;
+}
+
+export const AppLayout: React.FC<AppLayoutProps> = ({ children, features }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { isAuthenticated, isLoading, isEnabled, user, error, login, logout } = useAuth();
@@ -334,56 +341,61 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                   >
                     Tools
                   </NavItem>
-                  <NavItem
-                    itemId="sandbox"
-                    isActive={isNavItemActive('/sandbox')}
-                    onClick={() => handleNavSelect('/sandbox')}
-                  >
-                    Sessions
-                  </NavItem>
-                  <NavItem
-                    itemId="sandboxes"
-                    isActive={isNavItemActive('/sandboxes')}
-                    onClick={() => handleNavSelect('/sandboxes')}
-                  >
-                    Sandboxes
-                  </NavItem>
-                  <NavItem
-                    itemId="file-browser"
-                    isActive={isNavItemActive('/sandbox/files')}
-                    onClick={() => handleNavSelect('/sandbox/files')}
-                  >
-                    Files
-                  </NavItem>
+                  {features?.sandbox && (
+                    <>
+                      <NavItem
+                        itemId="sandbox"
+                        isActive={isNavItemActive('/sandbox')}
+                        onClick={() => handleNavSelect('/sandbox')}
+                      >
+                        Sessions
+                      </NavItem>
+                      <NavItem
+                        itemId="sandboxes"
+                        isActive={isNavItemActive('/sandboxes')}
+                        onClick={() => handleNavSelect('/sandboxes')}
+                      >
+                        Sandboxes
+                      </NavItem>
+                    </>
+                  )}
                 </NavList>
               </NavGroup>
 
-              <NavList>
-                <NavItem
-                  itemId="integrations"
-                  isActive={isNavItemActive('/integrations')}
-                  onClick={() => handleNavSelect('/integrations')}
-                >
-                  Integrations
-                </NavItem>
-              </NavList>
+              {features?.integrations && (
+                <NavList>
+                  <NavItem
+                    itemId="integrations"
+                    isActive={isNavItemActive('/integrations')}
+                    onClick={() => handleNavSelect('/integrations')}
+                  >
+                    Integrations
+                  </NavItem>
+                </NavList>
+              )}
 
-              <NavList>
-                <NavItem
-                  itemId="sessions"
-                  isActive={isNavItemActive('/sessions')}
-                  onClick={() => handleNavSelect('/sessions')}
-                >
-                  Sessions
-                </NavItem>
-                <NavItem
-                  itemId="triggers"
-                  isActive={isNavItemActive('/triggers')}
-                  onClick={() => handleNavSelect('/triggers')}
-                >
-                  Triggers
-                </NavItem>
-              </NavList>
+              {(features?.sandbox || features?.triggers) && (
+                <NavList>
+                  {features?.sandbox && (
+                    <NavItem
+                      itemId="sessions"
+                      isActive={isNavItemActive('/sessions')}
+                      onClick={() => handleNavSelect('/sessions')}
+                    >
+                      Sessions
+                    </NavItem>
+                  )}
+                  {features?.triggers && (
+                    <NavItem
+                      itemId="triggers"
+                      isActive={isNavItemActive('/triggers')}
+                      onClick={() => handleNavSelect('/triggers')}
+                    >
+                      Triggers
+                    </NavItem>
+                  )}
+                </NavList>
+              )}
 
               <NavGroup title="Gateway & Routing">
                 <NavList>

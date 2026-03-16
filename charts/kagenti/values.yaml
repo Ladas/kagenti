@@ -2,6 +2,14 @@
 openshift: true
 
 # ------------------------------------------------------------------
+#  Feature flags: experimental features disabled by default
+# ------------------------------------------------------------------
+featureFlags:
+  sandbox: false
+  integrations: false
+  triggers: false
+
+# ------------------------------------------------------------------
 #  Control Panel: Enable or disable components here
 # ------------------------------------------------------------------
 components:
