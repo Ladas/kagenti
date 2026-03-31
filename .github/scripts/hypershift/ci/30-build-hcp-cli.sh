@@ -10,9 +10,13 @@ HCP_DOWNLOAD_URL=$(oc get consoleclidownloads hcp-cli-download \
 
 if [ -z "$HCP_DOWNLOAD_URL" ]; then
     echo "Warning: Could not find hcp CLI download URL, building from source..."
-    git clone --depth 1 https://github.com/openshift/hypershift.git /tmp/hypershift
+    # Pin to release branch matching OCP_VERSION to avoid Go version churn from main
+    HCP_BRANCH="release-${OCP_VERSION%%.*}.${OCP_VERSION#*.}"  # e.g. 4.20.11 → release-4.20
+    HCP_BRANCH="${HCP_BRANCH%.*}"                               # strip patch: release-4.20
+    echo "Cloning HyperShift branch: ${HCP_BRANCH}"
+    git clone --depth 1 -b "${HCP_BRANCH}" https://github.com/openshift/hypershift.git /tmp/hypershift
     cd /tmp/hypershift
-    make product-cli
+    GOTOOLCHAIN=auto make product-cli
     sudo mv bin/hcp /usr/local/bin/hcp
     sudo chmod +x /usr/local/bin/hcp
     rm -rf /tmp/hypershift
@@ -45,9 +49,13 @@ else
         if [ "$attempt" -eq "$MAX_RETRIES" ]; then
             echo "Error: Failed to download hcp CLI after $MAX_RETRIES attempts"
             echo "Falling back to building from source..."
-            git clone --depth 1 https://github.com/openshift/hypershift.git /tmp/hypershift
+            # Pin to release branch matching OCP_VERSION to avoid Go version churn from main
+    HCP_BRANCH="release-${OCP_VERSION%%.*}.${OCP_VERSION#*.}"  # e.g. 4.20.11 → release-4.20
+    HCP_BRANCH="${HCP_BRANCH%.*}"                               # strip patch: release-4.20
+    echo "Cloning HyperShift branch: ${HCP_BRANCH}"
+    git clone --depth 1 -b "${HCP_BRANCH}" https://github.com/openshift/hypershift.git /tmp/hypershift
             cd /tmp/hypershift
-            make product-cli
+            GOTOOLCHAIN=auto make product-cli
             sudo mv bin/hcp /usr/local/bin/hcp
             sudo chmod +x /usr/local/bin/hcp
             rm -rf /tmp/hypershift
