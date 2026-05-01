@@ -1040,14 +1040,10 @@ if [ "$RUN_AGENTS" = "true" ] || [ "$RUN_TEST" = "true" ] || [ "$RUN_UI_TESTS" =
             [ "$i" -lt 30 ] && sleep 3
         done
 
-        # Now restart agents so they pick up the migrated schema
-        for agent in sandbox-legion sandbox-basic sandbox-hardened sandbox-restricted sandbox-agent; do
-            kubectl rollout restart "deployment/$agent" -n team1 2>/dev/null || true
-        done
-        for agent in sandbox-legion sandbox-basic sandbox-hardened sandbox-restricted; do
-            kubectl rollout status "deployment/$agent" -n team1 --timeout=120s 2>/dev/null || true
-        done
-        log_step "Sandbox agents restarted (schema refresh after backend migration)"
+        # NOTE: Agent restart removed — agents connect to DB per-request,
+        # not at startup. Restarting here caused 30 CI sandbox test failures
+        # because the LLM executor wasn't warm when tests started immediately.
+        log_step "Backend schema migrated (agents will pick up changes on next request)"
     fi
 fi
 
