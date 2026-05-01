@@ -1125,18 +1125,26 @@ if [ "$RUN_TEST" = "true" ]; then
         sleep 5
     done
 
-    # Wait for sandbox agents to be healthy (agent card must respond)
+    # Wait for sandbox agents to be ready (LLM warm + DB pool initialized).
+    # Uses /ready endpoint which only returns 200 after startup warm-up.
+    # Falls back to agent-card if /ready not implemented (older agent versions).
     for variant in legion hardened basic restricted; do
         AGENT_READY=""
-        for j in {1..12}; do
+        for j in {1..24}; do
             AGENT_READY=$(kubectl exec "deploy/sandbox-${variant}" -n team1 -- \
-                python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/.well-known/agent-card.json', timeout=5); print('ok')" 2>/dev/null || echo "")
+                python3 -c "import urllib.request; r=urllib.request.urlopen('http://localhost:8000/ready', timeout=10); print('ok' if r.status==200 else 'warming')" 2>/dev/null || echo "")
             if [ "$AGENT_READY" = "ok" ]; then
                 break
             fi
+            # Fallback: try agent card (older agents without /ready)
+            if [ "$j" -eq 12 ]; then
+                AGENT_READY=$(kubectl exec "deploy/sandbox-${variant}" -n team1 -- \
+                    python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/.well-known/agent-card.json', timeout=5); print('ok')" 2>/dev/null || echo "")
+                [ "$AGENT_READY" = "ok" ] && break
+            fi
             sleep 5
         done
-        [ "$AGENT_READY" = "ok" ] && log_step "sandbox-${variant}: healthy" || log_warn "sandbox-${variant}: not healthy after 60s"
+        [ "$AGENT_READY" = "ok" ] && log_step "sandbox-${variant}: ready" || log_warn "sandbox-${variant}: not ready after 120s"
     done
 
     log_step "Running E2E tests..."

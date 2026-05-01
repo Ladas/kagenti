@@ -110,62 +110,33 @@ async function waitForAgentReady(page: Page, timeoutMs = 240000) {
     return false;
   }
 
-  // Phase 2: Wait for the agent's A2A endpoint to actually respond.
-  // The pod can be "Ready" per Kubernetes but the Python server inside
-  // may still be starting (importing models, connecting to DB, etc.).
-  // Poll the health endpoint via kubectl exec for up to 180s.
-  console.log('[redeploy] Polling agent A2A endpoint for readiness...');
+  // Phase 2: Wait for the agent's /ready endpoint which verifies LLM is warm.
+  // The agent card responds immediately but /ready only returns 200 after
+  // the LLM connection, DB pool, and graph are initialized at startup.
+  console.log('[redeploy] Polling agent /ready endpoint (LLM warm-up)...');
   let agentHealthy = false;
   const healthDeadline = Math.min(Date.now() + 180000, deadline);
   while (Date.now() < healthDeadline) {
     const result = kc(
-      `exec deploy/${AGENT_NAME} -n ${NAMESPACE} -- python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/.well-known/agent-card.json', timeout=5); print('ready')"`,
+      `exec deploy/${AGENT_NAME} -n ${NAMESPACE} -- python3 -c "import urllib.request; r=urllib.request.urlopen('http://localhost:8000/ready', timeout=10); print('ready' if r.status==200 else 'warming')"`,
       15000
     );
     if (result.includes('ready')) {
       agentHealthy = true;
-      console.log('[redeploy] Agent A2A endpoint is responding');
+      console.log('[redeploy] Agent LLM executor is warm');
       break;
     }
+    console.log(`[redeploy] Agent warming up: ${result.substring(0, 80)}`);
     await page.waitForTimeout(5000);
   }
   if (!agentHealthy) {
-    console.error('[redeploy] FAILED: Agent A2A endpoint not responding after 180s');
+    console.error('[redeploy] FAILED: Agent /ready not responding after 180s');
     return false;
   }
 
-  // Phase 3: Send a warmup message via kubectl exec to force LLM initialization.
-  // The agent card responds immediately but the LLM executor only initializes
-  // on the first real message. Without this, the UI message hangs.
-  console.log('[redeploy] Phase 3: Sending warmup message to initialize LLM executor...');
-  let warmedUp = false;
-  for (let w = 0; w < 6; w++) {
-    const warmup = kc(
-      `exec deploy/${AGENT_NAME} -n ${NAMESPACE} -- python3 -c "
-import urllib.request, json
-payload = json.dumps({'jsonrpc':'2.0','id':'warmup','method':'message/send','params':{'message':{'role':'user','parts':[{'kind':'text','text':'echo warmup'}],'messageId':'warmup','contextId':'warmup-${Date.now()}'}}}).encode()
-req = urllib.request.Request('http://localhost:8000/', data=payload, headers={'Content-Type':'application/json','Accept':'application/json'})
-try:
-    r = urllib.request.urlopen(req, timeout=60)
-    print('warm' if r.status == 200 else 'cold')
-except Exception as e:
-    print(f'cold:{e}')
-"`,
-      90000
-    );
-    if (warmup.includes('warm')) {
-      warmedUp = true;
-      console.log(`[redeploy] LLM executor warmed up after attempt ${w + 1}`);
-      break;
-    }
-    console.log(`[redeploy] Warmup attempt ${w + 1}/6: ${warmup.substring(0, 100)}`);
-    await page.waitForTimeout(10000);
-  }
-  if (!warmedUp) {
-    console.log('[redeploy] WARNING: Warmup did not complete — proceeding anyway');
-  }
-
-  // Phase 4: Extra buffer for service endpoint propagation.
+  // Phase 3: Extra buffer for service endpoint propagation.
+  // No manual warmup needed — the agent warms up LLM + DB at startup
+  // (before /ready returns 200). Phase 2 already confirmed /ready passed.
   await page.waitForTimeout(5000);
   console.log('[redeploy] Agent ready (all phases complete)');
   return true;
