@@ -218,6 +218,17 @@ else
     PYTEST_CMD="pytest"
 fi
 
+# Verify LiteLLM proxy is running (may crash during image builds due to OOM).
+# Without LiteLLM, the budget proxy can't forward requests and all sandbox
+# agent tests fail with "No events received from SSE stream".
+LITELLM_RUNNING=$(kubectl get pods -n kagenti-system -l app=litellm-proxy --no-headers 2>/dev/null | grep -c "Running" || echo 0)
+if [ "$LITELLM_RUNNING" = "0" ]; then
+    log_info "LiteLLM proxy not running — restarting..."
+    kubectl rollout restart deploy/litellm-proxy -n kagenti-system 2>/dev/null || true
+    kubectl rollout status deploy/litellm-proxy -n kagenti-system --timeout=120s 2>/dev/null || log_info "LiteLLM restart failed"
+    log_info "LiteLLM proxy restarted"
+fi
+
 # Support filtering tests via PYTEST_FILTER or PYTEST_ARGS
 # PYTEST_FILTER: pytest -k filter expression (e.g., "test_mlflow" or "TestGenAI")
 # PYTEST_ARGS: additional pytest arguments (e.g., "-x" for stop on first failure)
