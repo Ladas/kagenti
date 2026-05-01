@@ -221,7 +221,7 @@ fi
 # Verify LiteLLM proxy is running (may crash during image builds due to OOM).
 # Without LiteLLM, the budget proxy can't forward requests and all sandbox
 # agent tests fail with "No events received from SSE stream".
-LITELLM_RUNNING=$(kubectl get pods -n kagenti-system -l app=litellm-proxy --no-headers 2>/dev/null | grep -c "Running" || echo 0)
+LITELLM_RUNNING=$(kubectl get pods -n kagenti-system -l app.kubernetes.io/name=litellm-proxy --no-headers 2>/dev/null | grep -c "Running" || echo 0)
 if [ "$LITELLM_RUNNING" = "0" ]; then
     log_info "LiteLLM proxy not running — restarting..."
     kubectl rollout restart deploy/litellm-proxy -n kagenti-system 2>/dev/null || true

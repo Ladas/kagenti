@@ -1110,7 +1110,7 @@ if [ "$RUN_TEST" = "true" ]; then
     # time for DB migration, SPIFFE setup, and Keycloak discovery.
     # Verify LiteLLM proxy is still running (may have been OOMKilled during
     # image builds). Restart it if the pod disappeared.
-    LITELLM_PODS=$(kubectl get pods -n kagenti-system -l app=litellm-proxy --no-headers 2>/dev/null | grep -c "Running" || echo 0)
+    LITELLM_PODS=$(kubectl get pods -n kagenti-system -l app.kubernetes.io/name=litellm-proxy --no-headers 2>/dev/null | grep -c "Running" || echo 0)
     if [ "$LITELLM_PODS" = "0" ]; then
         log_warn "LiteLLM proxy not running — restarting..."
         kubectl rollout restart deploy/litellm-proxy -n kagenti-system 2>/dev/null || true
