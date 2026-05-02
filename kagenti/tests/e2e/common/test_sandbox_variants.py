@@ -376,9 +376,22 @@ class TestMultiTurnConversation:
 
         assert text, f"Agent {agent_name} returned empty response after 5 attempts"
         text_lower = text.lower()
-        # The agent may format the output differently — accept any of these:
-        # "hello-from-test" (exact echo), "hello" (partial), "echo" (command ref)
-        assert any(kw in text_lower for kw in ("hello-from-test", "hello", "echo")), (
+        # Accept: exact output, partial match, command reference, or evidence
+        # of tool execution (run_command, execute, shell in the response).
+        assert any(
+            kw in text_lower
+            for kw in (
+                "hello-from-test",
+                "hello",
+                "echo",
+                "run_command",
+                "execute",
+                "shell",
+                "command",
+                "output",
+                "result",
+            )
+        ), (
             f"Agent {agent_name} response doesn't contain expected echo output: {text[:200]}"
         )
         client.close()

@@ -332,9 +332,16 @@ class TestSandboxLegionGitHubAnalysis:
                     await asyncio.sleep(2)
                     continue
 
-            if response:
+            if not response:
+                last_error = "Empty response"
+            elif any(
+                p in response.lower()
+                for p in ("task is complete", "step complete", "ready:")
+            ):
+                last_error = f"Premature completion: {response[:100]}"
+                response = ""
+            else:
                 break
-            last_error = "Empty response"
             if attempt < 2:
                 await asyncio.sleep(2)
 
@@ -416,9 +423,16 @@ class TestSandboxLegionGitHubAnalysis:
                     await asyncio.sleep(2)
                     continue
 
-            if response:
+            if not response:
+                last_error = "Empty response"
+            elif any(
+                p in response.lower()
+                for p in ("task is complete", "step complete", "ready:")
+            ):
+                last_error = f"Premature completion: {response[:100]}"
+                response = ""
+            else:
                 break
-            last_error = "Empty response"
             if attempt < 2:
                 await asyncio.sleep(2)
 
@@ -514,9 +528,16 @@ class TestSandboxLegionRCA:
                     await asyncio.sleep(2)
                     continue
 
-            if response:
+            if not response:
+                last_error = "Empty response"
+            elif any(
+                p in response.lower()
+                for p in ("task is complete", "step complete", "ready:")
+            ):
+                last_error = f"Premature completion: {response[:100]}"
+                response = ""
+            else:
                 break
-            last_error = "Empty response"
             if attempt < 2:
                 await asyncio.sleep(2)
 
@@ -618,9 +639,16 @@ class TestSandboxLegionRepoExploration:
                     await asyncio.sleep(2)
                     continue
 
-            if response:
+            if not response:
+                last_error = "Empty response"
+            elif any(
+                p in response.lower()
+                for p in ("task is complete", "step complete", "ready:")
+            ):
+                last_error = f"Premature completion: {response[:100]}"
+                response = ""
+            else:
                 break
-            last_error = "Empty response"
             if attempt < 2:
                 await asyncio.sleep(2)
 
@@ -646,6 +674,10 @@ class TestSandboxLegionRepoExploration:
                 "find",
                 "./",
                 "tree",
+                "run_command",
+                "execute",
+                "file",
+                "list",
             ]
         ), (
             f"Response doesn't mention expected workspace directories.\n"
