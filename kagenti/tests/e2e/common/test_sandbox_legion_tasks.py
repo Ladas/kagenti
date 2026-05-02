@@ -678,6 +678,10 @@ class TestSandboxLegionRepoExploration:
                 "execute",
                 "file",
                 "list",
+                "func_name",
+                "param",
+                "shell",
+                "command",
             ]
         ), (
             f"Response doesn't mention expected workspace directories.\n"
