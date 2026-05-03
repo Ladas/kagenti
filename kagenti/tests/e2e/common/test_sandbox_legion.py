@@ -133,10 +133,13 @@ def _get_ssl_context():
         ca_path = _fetch_openshift_ingress_ca()
 
     if not ca_path:
-        raise RuntimeError(
-            "Could not fetch OpenShift ingress CA certificate. "
-            "Set OPENSHIFT_INGRESS_CA env var to the CA bundle path."
+        import logging as _logging
+
+        _logging.getLogger(__name__).warning(
+            "Could not fetch OpenShift ingress CA — disabling SSL verification. "
+            "Set OPENSHIFT_INGRESS_CA env var to fix."
         )
+        return False
 
     return ssl.create_default_context(cafile=ca_path)
 
