@@ -31,8 +31,10 @@ class TestUIAgentDiscovery:
         """Set SSL context for OpenShift routes."""
         import ssl
 
-        if is_openshift:
+        if openshift_ingress_ca:
             self._verify = ssl.create_default_context(cafile=openshift_ingress_ca)
+        elif is_openshift:
+            self._verify = False
         else:
             self._verify = True
 
@@ -221,8 +223,10 @@ class TestToolDiscovery:
         """Set SSL context for OpenShift routes."""
         import ssl
 
-        if is_openshift:
+        if openshift_ingress_ca:
             self._verify = ssl.create_default_context(cafile=openshift_ingress_ca)
+        elif is_openshift:
+            self._verify = False
         else:
             self._verify = True
 

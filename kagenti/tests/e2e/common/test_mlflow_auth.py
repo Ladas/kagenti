@@ -243,8 +243,10 @@ class TestMLflowAuth:
         """Set SSL verification: SSLContext with CA on OpenShift, True on Kind."""
         import ssl
 
-        if is_openshift:
+        if openshift_ingress_ca:
             self.ssl_verify = ssl.create_default_context(cafile=openshift_ingress_ca)
+        elif is_openshift:
+            self.ssl_verify = False
         else:
             self.ssl_verify = True
 
@@ -428,8 +430,10 @@ class TestMLflowBackend:
         """Set SSL verification: SSLContext with CA on OpenShift, True on Kind."""
         import ssl
 
-        if is_openshift:
+        if openshift_ingress_ca:
             self.ssl_verify = ssl.create_default_context(cafile=openshift_ingress_ca)
+        elif is_openshift:
+            self.ssl_verify = False
         else:
             self.ssl_verify = True
 
