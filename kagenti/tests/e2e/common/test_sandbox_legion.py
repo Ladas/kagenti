@@ -585,10 +585,16 @@ class TestSandboxLegionMemory:
             print(f"  Context ID: {context_id}")
 
             try:
+                # Use file-based memory instead of conversational — avoids
+                # tool_choice="any" mangling non-tool prompts as "READY: step complete"
                 client1, _ = await _connect_to_agent(agent_url)
                 msg1 = A2AMessage(
                     role="user",
-                    parts=[TextPart(text="My name is Bob Beep")],
+                    parts=[
+                        TextPart(
+                            text="Write the text 'Bob Beep' to a file called myname.txt"
+                        )
+                    ],
                     messageId=uuid4().hex,
                     contextId=context_id,
                 )
@@ -601,7 +607,11 @@ class TestSandboxLegionMemory:
                 client2, _ = await _connect_to_agent(agent_url)
                 msg2 = A2AMessage(
                     role="user",
-                    parts=[TextPart(text="What is my name?")],
+                    parts=[
+                        TextPart(
+                            text="Read the file myname.txt and tell me its contents"
+                        )
+                    ],
                     messageId=uuid4().hex,
                     contextId=context_id,
                 )
