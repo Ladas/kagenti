@@ -29,11 +29,12 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.fixture(scope="module")
-def _ssl_verify(openshift_ingress_ca, is_openshift):
+def _ssl_verify(openshift_ingress_ca):
     """SSL verification context — uses OpenShift ingress CA when available."""
     if openshift_ingress_ca:
         return ssl.create_default_context(cafile=openshift_ingress_ca)
-    if is_openshift:
+    # No CA available — disable verification if using HTTPS routes
+    if LITELLM_PROXY_URL.startswith("https://"):
         return False
     return True
 
