@@ -29,13 +29,11 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.fixture(scope="module")
-def _ssl_verify(openshift_ingress_ca):
+def _ssl_verify(openshift_ingress_ca, is_openshift):
     """SSL verification context — uses OpenShift ingress CA when available."""
     if openshift_ingress_ca:
         return ssl.create_default_context(cafile=openshift_ingress_ca)
-    # On OpenShift clusters without accessible CA, disable verification
-    # to avoid CERTIFICATE_VERIFY_FAILED with self-signed ingress certs.
-    if os.getenv("KAGENTI_CONFIG_FILE", "").endswith("ocp_values.yaml"):
+    if is_openshift:
         return False
     return True
 

@@ -400,10 +400,12 @@ def openshift_ingress_ca(is_openshift):
     _openshift_ca_file_cache = _fetch_openshift_ingress_ca()
 
     if _openshift_ca_file_cache is None:
-        pytest.fail(
-            "Could not fetch OpenShift ingress CA certificate. "
-            "Tried kube-root-ca.crt from kagenti-system and openshift-config. "
-            "Set OPENSHIFT_INGRESS_CA env var to the CA bundle path as a workaround."
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "Could not fetch OpenShift ingress CA certificate — "
+            "tests will use verify=False for HTTPS routes. "
+            "Set OPENSHIFT_INGRESS_CA env var to fix."
         )
 
     return _openshift_ca_file_cache
