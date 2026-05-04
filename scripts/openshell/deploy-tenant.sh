@@ -26,7 +26,7 @@ CHART_DIR="$REPO_ROOT/charts/openshell"
 HELM_RELEASE_PREFIX="openshell"
 KIND_DOMAIN="localtest.me"
 KIND_TLS_NODEPORT=30443
-IMAGE_TAG="${OPENSHELL_IMAGE_TAG:-latest}"
+IMAGE_TAG="${OPENSHELL_IMAGE_TAG:-}"
 DRY_RUN=false
 TIMEOUT=120
 EXTRA_HELM_SETS=()  # Additional --set arguments
@@ -93,7 +93,7 @@ fi
 
 # ── Helper: detect OpenShift ────────────────────────────────────────────────
 is_openshift() {
-  kubectl get crd routes.route.openshift.io &>/dev/null
+  kubectl get clusterversion &>/dev/null
 }
 
 # ── Helper: get OpenShift base domain ───────────────────────────────────────
@@ -154,6 +154,25 @@ if ! is_openshift; then
   if [[ -n "$KEYCLOAK_CLUSTER_IP" ]]; then
     EXTRA_HELM_SETS+=("keycloakClusterIP=$KEYCLOAK_CLUSTER_IP")
   fi
+else
+  # OpenShift: build a combined CA bundle (system CAs + ingress CA) so the
+  # gateway can verify TLS to the Keycloak route (edge-terminated).
+  log_info "Creating combined trusted CA bundle (system + ingress CA)..."
+  COMBINED_CA_CM="openshell-trusted-ca"
+  (
+    kubectl get configmap config-trusted-cabundle -n "$TENANT" -o jsonpath='{.data.ca-bundle\.crt}' 2>/dev/null
+    echo
+    kubectl get secret router-ca -n openshift-ingress-operator -o jsonpath='{.data.tls\.crt}' 2>/dev/null | base64 -d
+  ) | kubectl create configmap "$COMBINED_CA_CM" -n "$TENANT" \
+        --from-file=ca-bundle.crt=/dev/stdin --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+  EXTRA_HELM_SETS+=("trustedCABundle=$COMBINED_CA_CM")
+fi
+
+# Override image tags only when explicitly requested (otherwise use values.yaml defaults)
+if [[ -n "$IMAGE_TAG" ]]; then
+  EXTRA_HELM_SETS+=("images.gateway.tag=$IMAGE_TAG")
+  EXTRA_HELM_SETS+=("images.computeDriver.tag=$IMAGE_TAG")
+  EXTRA_HELM_SETS+=("images.credentialsDriver.tag=$IMAGE_TAG")
 fi
 
 echo ""
@@ -167,7 +186,7 @@ echo "  Namespace:      $TENANT"
 echo "  Ingress type:   $INGRESS_TYPE"
 echo "  Ingress host:   $INGRESS_HOST"
 echo "  OIDC issuer:    $OIDC_ISSUER"
-echo "  Image tag:      $IMAGE_TAG"
+echo "  Image tag:      ${IMAGE_TAG:-(from values.yaml)}"
 echo "  Chart:          $CHART_DIR"
 echo "  Dry run:        $DRY_RUN"
 echo ""
@@ -207,9 +226,6 @@ HELM_ARGS=(
   --set "driver.namespace=$TENANT"
   --set "ingress.type=$INGRESS_TYPE"
   --set "ingress.host=$INGRESS_HOST"
-  --set "images.gateway.tag=$IMAGE_TAG"
-  --set "images.computeDriver.tag=$IMAGE_TAG"
-  --set "images.credentialsDriver.tag=$IMAGE_TAG"
   --wait
   --timeout "${TIMEOUT}s"
 )
