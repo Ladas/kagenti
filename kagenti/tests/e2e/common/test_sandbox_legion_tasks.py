@@ -204,7 +204,8 @@ async def _extract_response(client, message):
                     task_state = task_state.value
             if task_state in ("completed", "failed", "canceled"):
                 if task and task.artifacts:
-                    final_text = _extract_text_from_artifacts(task.artifacts)
+                    last_artifact = task.artifacts[-1]
+                    final_text = _extract_text_from_artifacts([last_artifact])
                     if final_text:
                         full_response = final_text
                 break

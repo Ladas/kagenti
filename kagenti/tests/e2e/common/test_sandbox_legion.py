@@ -239,12 +239,14 @@ async def _extract_response(client, message):
     events_received = ["NonStreaming"]
 
     # Result can be a Task or a Message
+    # Use the LAST artifact — the reporter's final answer.
+    # Earlier artifacts contain intermediate tool call descriptions.
     if hasattr(result, "artifacts") and result.artifacts:
-        for artifact in result.artifacts:
-            for part in artifact.parts or []:
-                p = getattr(part, "root", part)
-                if hasattr(p, "text"):
-                    full_response += p.text
+        last_artifact = result.artifacts[-1]
+        for part in last_artifact.parts or []:
+            p = getattr(part, "root", part)
+            if hasattr(p, "text"):
+                full_response += p.text
     elif hasattr(result, "parts"):
         for part in result.parts or []:
             p = getattr(part, "root", part)
