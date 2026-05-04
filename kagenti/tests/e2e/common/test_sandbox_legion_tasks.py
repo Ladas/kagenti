@@ -196,12 +196,14 @@ async def _extract_response(client, message):
                         if hasattr(p, "text"):
                             full_response += p.text
 
-            if event is None and task and task.artifacts:
-                for artifact in task.artifacts:
-                    for part in artifact.parts or []:
-                        p = getattr(part, "root", part)
-                        if hasattr(p, "text"):
-                            full_response += p.text
+            if event is None and task:
+                if task.artifacts:
+                    for artifact in task.artifacts:
+                        for part in artifact.parts or []:
+                            p = getattr(part, "root", part)
+                            if hasattr(p, "text"):
+                                full_response += p.text
+                break
 
         elif isinstance(result, A2AMessage):
             events_received.append("Message")
@@ -375,7 +377,7 @@ class TestSandboxLegionGitHubAnalysis:
 
             if not response:
                 last_error = "Empty response"
-            elif any(
+            elif len(response.strip()) < 40 and any(
                 p in response.lower()
                 for p in ("task is complete", "step complete", "ready:")
             ):
@@ -459,7 +461,7 @@ class TestSandboxLegionGitHubAnalysis:
 
             if not response:
                 last_error = "Empty response"
-            elif any(
+            elif len(response.strip()) < 40 and any(
                 p in response.lower()
                 for p in ("task is complete", "step complete", "ready:")
             ):
@@ -565,7 +567,7 @@ class TestSandboxLegionRCA:
 
             if not response:
                 last_error = "Empty response"
-            elif any(
+            elif len(response.strip()) < 40 and any(
                 p in response.lower()
                 for p in ("task is complete", "step complete", "ready:")
             ):
@@ -676,7 +678,7 @@ class TestSandboxLegionRepoExploration:
 
             if not response:
                 last_error = "Empty response"
-            elif any(
+            elif len(response.strip()) < 40 and any(
                 p in response.lower()
                 for p in ("task is complete", "step complete", "ready:")
             ):
