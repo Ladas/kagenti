@@ -136,18 +136,10 @@ async function waitForAgentReady(page: Page, timeoutMs = 240000) {
 }
 
 async function sendMessageAndWait(page: Page, message: string) {
-  // Navigate to sandbox with this agent
-  const nav = page.locator('nav a, nav button').filter({ hasText: /^Sessions$/ });
-  await expect(nav.first()).toBeVisible({ timeout: 10000 });
-  await nav.first().click();
-  await page.waitForLoadState('networkidle');
-  await page.evaluate((agent) => {
-    const url = new URL(window.location.href);
-    url.searchParams.set('agent', agent);
-    window.history.replaceState({}, '', url.toString());
-    window.dispatchEvent(new PopStateEvent('popstate'));
-  }, AGENT_NAME);
-  await page.waitForTimeout(2000);
+  // Navigate to sandbox sessions page with the agent selected
+  await page.goto(`/sandbox?agent=${AGENT_NAME}`);
+  await page.waitForLoadState('domcontentloaded');
+  await page.waitForTimeout(3000);
 
   // Try multiple selectors — the input may be a textarea or a placeholder-based input
   let input = page.locator('textarea[aria-label="Message input"]');
@@ -237,17 +229,9 @@ test.describe('Agent Redeploy', () => {
     expect(redeployed).toBe(true);
 
     // ── Step 4: Check Pod tab shows new limits ────────────────────────────
-    // Navigate to the session and check Pod tab
-    const nav = page.locator('nav a, nav button').filter({ hasText: /^Sessions$/ });
-    await nav.first().click();
-    await page.waitForLoadState('networkidle');
-    await page.evaluate((agent) => {
-      const url = new URL(window.location.href);
-      url.searchParams.set('agent', agent);
-      window.history.replaceState({}, '', url.toString());
-      window.dispatchEvent(new PopStateEvent('popstate'));
-    }, AGENT_NAME);
-    await page.waitForTimeout(2000);
+    await page.goto(`/sandbox?agent=${AGENT_NAME}`);
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(3000);
 
     // Click Pod tab (diagnostic only — kubectl verification below is authoritative)
     const podTab = page.locator('[role="tab"]').filter({ hasText: /Pod/i });

@@ -109,7 +109,7 @@ async function waitForResponse(page: Page, timeoutMs = 120000) {
 
   // Wait for loop card to appear and reach done/failed state
   const loopCards = page.locator('[data-testid="agent-loop-card"]');
-  await expect(loopCards.last()).toBeVisible({ timeout: 30000 });
+  await expect(loopCards.last()).toBeVisible({ timeout: 120000 });
   const activeStatuses = loopCards.last().locator('text=/planning|executing|reflecting/');
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {

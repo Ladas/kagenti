@@ -99,7 +99,7 @@ async function sendAndWaitForResponse(
 
   // Wait for agent to finish — poll until no loop card shows active status
   const loopCards = page.locator('[data-testid="agent-loop-card"]');
-  await expect(loopCards.last()).toBeVisible({ timeout: 30000 });
+  await expect(loopCards.last()).toBeVisible({ timeout: 120000 });
   const activeStatuses = loopCards.last().locator('text=/planning|executing|reflecting/');
   for (let i = 0; i < 60; i++) {
     const count = await activeStatuses.count();

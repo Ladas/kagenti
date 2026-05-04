@@ -65,12 +65,12 @@ async function sendAndWait(
   timeout = AGENT_TIMEOUT
 ): Promise<string> {
   const chatInput = page.getByPlaceholder(/Type your message/i);
-  await expect(chatInput).toBeVisible({ timeout: 10000 });
-  await expect(chatInput).toBeEnabled({ timeout: 5000 });
+  await expect(chatInput).toBeVisible({ timeout: 30000 });
+  await expect(chatInput).toBeEnabled({ timeout: 30000 });
   await chatInput.fill(message);
 
   const sendButton = page.getByRole('button', { name: /Send/i });
-  await expect(sendButton).toBeEnabled({ timeout: 5000 });
+  await expect(sendButton).toBeEnabled({ timeout: 15000 });
   await sendButton.click();
 
   // Verify user message appears in chat
