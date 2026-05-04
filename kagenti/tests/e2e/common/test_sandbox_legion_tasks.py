@@ -197,17 +197,16 @@ async def _extract_response(client, message):
                 if hasattr(event, "artifact") and event.artifact:
                     full_response += _extract_text_from_artifacts([event.artifact])
 
-            if task and task.artifacts:
-                text = _extract_text_from_artifacts(task.artifacts)
-                if text and not full_response:
-                    full_response = text
-
             task_state = ""
             if task and hasattr(task, "status") and task.status:
                 task_state = getattr(task.status, "state", "")
                 if hasattr(task_state, "value"):
                     task_state = task_state.value
             if task_state in ("completed", "failed", "canceled"):
+                if task and task.artifacts:
+                    final_text = _extract_text_from_artifacts(task.artifacts)
+                    if final_text:
+                        full_response = final_text
                 break
 
         elif isinstance(result, A2AMessage):
