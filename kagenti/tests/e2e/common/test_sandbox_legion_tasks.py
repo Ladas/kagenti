@@ -27,11 +27,9 @@ import pytest
 import httpx
 import yaml
 from uuid import uuid4
-from a2a.client import ClientConfig, ClientFactory
 from a2a.types import (
     Message as A2AMessage,
     TextPart,
-    TaskArtifactUpdateEvent,
 )
 
 from kagenti.tests.e2e.conftest import _fetch_openshift_ingress_ca
@@ -147,70 +145,54 @@ def _get_ssl_context():
 
 
 async def _connect_to_agent(agent_url):
-    """Connect via streaming-capable A2A client (SSE)."""
+    """Connect via non-streaming A2A client (more reliable than SSE)."""
     ssl_verify = _get_ssl_context()
     httpx_client = httpx.AsyncClient(timeout=300.0, verify=ssl_verify)
-    config = ClientConfig(httpx_client=httpx_client)
 
+    from a2a.client import A2AClient
     from a2a.client.card_resolver import A2ACardResolver
 
     resolver = A2ACardResolver(httpx_client, agent_url)
     card = await resolver.get_agent_card()
     card.url = agent_url
-    client = await ClientFactory.connect(card, client_config=config)
+    client = A2AClient(httpx_client=httpx_client, url=agent_url)
     return client, card
 
 
 async def _extract_response(client, message):
-    """Send an A2A message via SSE streaming with per-event idle timeout.
+    """Send an A2A message (non-streaming) and extract the text response.
 
-    Iterates over SSE events. If no event arrives within IDLE_TIMEOUT_S
-    seconds, the request is considered stuck and we fail. As long as
-    events keep flowing (even status updates), the connection stays alive
-    indefinitely — no total timeout cap.
+    Uses the non-streaming send_message API which returns a direct JSON
+    response. This avoids SSE connection drops from OpenShift routes.
     """
+    from a2a.types import SendMessageRequest, MessageSendParams
+
+    params = MessageSendParams(message=message)
+    request = SendMessageRequest(id=uuid4().hex, params=params)
+    response = await asyncio.wait_for(
+        client.send_message(request), timeout=IDLE_TIMEOUT_S
+    )
+
+    root = getattr(response, "root", response)
+    if hasattr(root, "error") and root.error:
+        raise RuntimeError(f"A2A error: {root.error}")
+
+    result = getattr(root, "result", None)
+    if result is None:
+        return ""
+
     full_response = ""
-    events_received = []
-
-    aiter = client.send_message(message).__aiter__()
-    while True:
-        try:
-            result = await asyncio.wait_for(aiter.__anext__(), timeout=IDLE_TIMEOUT_S)
-        except StopAsyncIteration:
-            break
-        except asyncio.TimeoutError:
-            pytest.fail(
-                f"No SSE event received for {IDLE_TIMEOUT_S}s (idle timeout). "
-                f"Events so far: {events_received}. "
-                f"Partial response: {full_response[:200]}"
-            )
-
-        if isinstance(result, tuple):
-            task, event = result
-            events_received.append(type(event).__name__ if event else "Task(final)")
-
-            if isinstance(event, TaskArtifactUpdateEvent):
-                if hasattr(event, "artifact") and event.artifact:
-                    for part in event.artifact.parts or []:
-                        p = getattr(part, "root", part)
-                        if hasattr(p, "text"):
-                            full_response += p.text
-
-            if event is None and task:
-                if task.artifacts:
-                    for artifact in task.artifacts:
-                        for part in artifact.parts or []:
-                            p = getattr(part, "root", part)
-                            if hasattr(p, "text"):
-                                full_response += p.text
-                break
-
-        elif isinstance(result, A2AMessage):
-            events_received.append("Message")
-            for part in result.parts or []:
+    if hasattr(result, "artifacts") and result.artifacts:
+        for artifact in result.artifacts:
+            for part in artifact.parts or []:
                 p = getattr(part, "root", part)
                 if hasattr(p, "text"):
                     full_response += p.text
+    elif hasattr(result, "parts"):
+        for part in result.parts or []:
+            p = getattr(part, "root", part)
+            if hasattr(p, "text"):
+                full_response += p.text
 
     return full_response
 
