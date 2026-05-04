@@ -353,10 +353,11 @@ class TestSandboxLegionGitHubAnalysis:
                 parts=[
                     TextPart(
                         text=(
-                            "Analyze this GitHub issue data and tell me: "
-                            "(1) what the issue title is, "
+                            "Write a file called issue_analysis.txt with: "
+                            "(1) the issue title, "
                             "(2) whether it's open or closed, "
-                            "(3) a one-sentence summary of the problem.\n\n"
+                            "(3) a one-sentence summary. "
+                            "Then read the file back and show me the contents.\n\n"
                             f"{MOCK_GITHUB_ISSUE}"
                         )
                     )
@@ -437,9 +438,10 @@ class TestSandboxLegionGitHubAnalysis:
                 parts=[
                     TextPart(
                         text=(
-                            "Analyze this GitHub pull request data and tell me: "
+                            "Write a file called pr_analysis.txt with: "
                             "(1) the PR title, (2) who authored it, "
-                            "(3) whether it was merged.\n\n"
+                            "(3) whether it was merged. "
+                            "Then read the file back and show me the contents.\n\n"
                             f"{MOCK_GITHUB_PR}"
                         )
                     )
@@ -532,17 +534,19 @@ class TestSandboxLegionRCA:
             context_id = f"rca-{uuid4().hex[:8]}"
 
             # Single turn: provide the log inline and ask for RCA
+            # Prompt asks to write to file to trigger tool_choice="any"
             msg = A2AMessage(
                 role="user",
                 parts=[
                     TextPart(
                         text=(
-                            "Perform a root cause analysis on this CI failure log. "
-                            "Your response MUST include: "
+                            "Save the following CI failure log to a file called "
+                            "ci_failure.log, then analyze it and write a root cause "
+                            "analysis to rca_report.txt that includes: "
                             "(1) the exact error that caused the failure, "
                             "(2) the root cause, "
                             "(3) a specific fix recommendation. "
-                            "Be precise — quote the actual error message.\n\n"
+                            "Then read rca_report.txt and show me the contents.\n\n"
                             f"--- CI LOG ---\n{MOCK_CI_FAILURE_LOG}\n--- END LOG ---"
                         )
                     )

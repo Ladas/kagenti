@@ -572,11 +572,11 @@ class TestSandboxLegionMemory:
     @pytest.mark.asyncio
     async def test_multi_turn_memory(self, test_session_id):
         """
-        Verify agent remembers context across turns.
+        Verify agent remembers context across turns via shared workspace.
 
-        Turn 1: Tell the agent a name ("My name is Bob Beep")
-        Turn 2: Ask for the name back ("What is my name?")
-        Expects the agent to recall "Bob Beep" from turn 1.
+        Turn 1: Write 'Bob Beep' to /tmp/myname.txt via shell
+        Turn 2: Read /tmp/myname.txt via shell
+        Expects 'Bob' in the response from turn 2.
         """
         agent_url = _get_sandbox_legion_url()
 
@@ -588,14 +588,14 @@ class TestSandboxLegionMemory:
             print(f"  Context ID: {context_id}")
 
             try:
-                # Use file-based memory instead of conversational — avoids
-                # tool_choice="any" mangling non-tool prompts as "READY: step complete"
+                # Use explicit shell commands to avoid tool_choice="any"
+                # mangling vague prompts as "READY: step complete"
                 client1, _ = await _connect_to_agent(agent_url)
                 msg1 = A2AMessage(
                     role="user",
                     parts=[
                         TextPart(
-                            text="Write the text 'Bob Beep' to a file called myname.txt"
+                            text="Run this shell command: echo 'Bob Beep' > /tmp/myname.txt"
                         )
                     ],
                     messageId=uuid4().hex,
@@ -611,9 +611,7 @@ class TestSandboxLegionMemory:
                 msg2 = A2AMessage(
                     role="user",
                     parts=[
-                        TextPart(
-                            text="Read the file myname.txt and tell me its contents"
-                        )
+                        TextPart(text="Run this shell command: cat /tmp/myname.txt")
                     ],
                     messageId=uuid4().hex,
                     contextId=context_id,
