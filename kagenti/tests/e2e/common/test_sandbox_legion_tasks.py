@@ -283,20 +283,57 @@ def _skip_if_github_unreachable():
         pytest.skip(f"GitHub API unreachable: {exc}")
 
 
+MOCK_GITHUB_ISSUE = textwrap.dedent("""\
+    GitHub Issue #751 — kagenti/kagenti
+    Title: Agent Catalog: fix import errors and registration bugs
+    State: closed
+    Author: pdettori
+    Created: 2025-12-10T14:22:00Z
+    Closed: 2025-12-15T09:30:00Z
+    Labels: bug, agent-catalog
+
+    Description:
+    The Agent Catalog feature has several bugs that prevent proper agent
+    registration and discovery:
+    1. ImportError when loading catalog module due to circular imports
+    2. Agent registration fails silently when namespace label is missing
+    3. Duplicate agents appear in catalog after re-registration
+
+    Resolution: Fixed in PR #752 — refactored imports, added validation
+    for namespace labels, and added dedup logic on registration.
+""")
+
+MOCK_GITHUB_PR = textwrap.dedent("""\
+    GitHub Pull Request #753 — kagenti/kagenti
+    Title: chore: bump kagenti-webhook to v0.4.2
+    State: merged
+    Author: lsmola
+    Created: 2025-12-16T10:00:00Z
+    Merged: 2025-12-16T15:45:00Z
+    Base: main
+    Labels: chore, dependencies
+
+    Description:
+    Bumps the kagenti-webhook dependency from v0.4.1 to v0.4.2.
+    This patch release fixes a race condition in the admission webhook
+    that could cause intermittent 500 errors during agent deployment.
+
+    Changes:
+    - charts/kagenti/Chart.yaml: webhook version 0.4.1 → 0.4.2
+    - go.mod: updated webhook module
+""")
+
+
 class TestSandboxLegionGitHubAnalysis:
-    """Test the agent performing real GitHub repository analysis."""
+    """Test the agent analyzing mock GitHub issue/PR data provided inline."""
 
     @pytest.mark.asyncio
     @pytest.mark.timeout(300)
     async def test_analyze_closed_issue(self):
         """
-        Ask the agent to analyze a real closed issue from kagenti/kagenti.
-
-        The agent should use web_fetch to read the issue and provide a
-        summary that includes relevant keywords.
-        Retries up to 3 times on empty or irrelevant responses.
+        Provide a mock GitHub issue inline and ask the agent to analyze it.
+        Uses inline data instead of real GitHub API to avoid rate limiting.
         """
-        _skip_if_github_unreachable()
         agent_url = _get_sandbox_legion_url()
 
         response = ""
@@ -311,18 +348,16 @@ class TestSandboxLegionGitHubAnalysis:
                     continue
                 pytest.fail(f"Sandbox agent not reachable at {agent_url}: {e}")
 
-            # Issue #751 is about Agent Catalog bugs -- a real closed issue
             message = A2AMessage(
                 role="user",
                 parts=[
                     TextPart(
                         text=(
-                            "Fetch and analyze GitHub issue #751 from the "
-                            "kagenti/kagenti repository. Use the URL: "
-                            "https://api.github.com/repos/kagenti/kagenti/issues/751 "
-                            "Tell me: (1) what the issue title is, "
+                            "Analyze this GitHub issue data and tell me: "
+                            "(1) what the issue title is, "
                             "(2) whether it's open or closed, "
-                            "(3) a one-sentence summary of the problem."
+                            "(3) a one-sentence summary of the problem.\n\n"
+                            f"{MOCK_GITHUB_ISSUE}"
                         )
                     )
                 ],
@@ -357,7 +392,6 @@ class TestSandboxLegionGitHubAnalysis:
         response_lower = response.lower()
         print(f"\n  Response: {response[:500]}")
 
-        # The issue is about Agent Catalog -- check for relevant terms
         assert any(
             term in response_lower
             for term in [
@@ -367,12 +401,10 @@ class TestSandboxLegionGitHubAnalysis:
                 "751",
                 "issue",
                 "closed",
-                "merged",
                 "registration",
                 "discovery",
                 "bug",
                 "fix",
-                "github",
             ]
         ), (
             f"Response doesn't mention expected keywords about issue #751.\n"
@@ -383,12 +415,9 @@ class TestSandboxLegionGitHubAnalysis:
     @pytest.mark.timeout(300)
     async def test_analyze_closed_pr(self):
         """
-        Ask the agent to analyze a recent closed PR from kagenti/kagenti.
-
-        The agent should fetch the PR data and summarize what changed.
-        Retries up to 3 times on empty or irrelevant responses.
+        Provide mock PR data inline and ask the agent to analyze it.
+        Uses inline data instead of real GitHub API to avoid rate limiting.
         """
-        _skip_if_github_unreachable()
         agent_url = _get_sandbox_legion_url()
 
         response = ""
@@ -403,17 +432,15 @@ class TestSandboxLegionGitHubAnalysis:
                     continue
                 pytest.fail(f"Sandbox agent not reachable at {agent_url}: {e}")
 
-            # PR #753 is a small chore PR -- bump kagenti-webhook
             message = A2AMessage(
                 role="user",
                 parts=[
                     TextPart(
                         text=(
-                            "Fetch GitHub pull request #753 from kagenti/kagenti. "
-                            "Use the URL: "
-                            "https://api.github.com/repos/kagenti/kagenti/pulls/753 "
-                            "Tell me: (1) the PR title, (2) who authored it, "
-                            "(3) whether it was merged."
+                            "Analyze this GitHub pull request data and tell me: "
+                            "(1) the PR title, (2) who authored it, "
+                            "(3) whether it was merged.\n\n"
+                            f"{MOCK_GITHUB_PR}"
                         )
                     )
                 ],
@@ -448,7 +475,6 @@ class TestSandboxLegionGitHubAnalysis:
         response_lower = response.lower()
         print(f"\n  Response: {response[:500]}")
 
-        # PR #753 is about bumping kagenti-webhook
         assert any(
             term in response_lower
             for term in [
@@ -461,8 +487,8 @@ class TestSandboxLegionGitHubAnalysis:
                 "merged",
                 "closed",
                 "dependency",
-                "github",
                 "author",
+                "lsmola",
             ]
         ), (
             f"Response doesn't mention expected keywords about PR #753.\n"

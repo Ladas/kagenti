@@ -154,13 +154,15 @@ def keycloak_token(keycloak_admin_credentials) -> Dict[str, str]:
     keycloak_base_url = os.environ.get("KEYCLOAK_URL", "http://localhost:8081")
     token_url = f"{keycloak_base_url}/realms/master/protocol/openid-connect/token"
 
-    # SSL verification: True by default, can be disabled via env var for self-signed certs
-    # Can also set KEYCLOAK_CA_BUNDLE to path of CA certificate bundle
+    # SSL verification: use CA bundle if available, disable for HTTPS routes
+    # without explicit CA, otherwise True for plain HTTP (Kind)
     verify_ssl: bool | str = True
-    if os.environ.get("KEYCLOAK_VERIFY_SSL", "true").lower() == "false":
-        verify_ssl = False
-    elif os.environ.get("KEYCLOAK_CA_BUNDLE"):
+    if os.environ.get("KEYCLOAK_CA_BUNDLE"):
         verify_ssl = os.environ["KEYCLOAK_CA_BUNDLE"]
+    elif os.environ.get("KEYCLOAK_VERIFY_SSL", "").lower() == "false":
+        verify_ssl = False
+    elif keycloak_base_url.startswith("https"):
+        verify_ssl = False
 
     data = {
         "grant_type": "password",
@@ -191,18 +193,16 @@ def keycloak_token(keycloak_admin_credentials) -> Dict[str, str]:
 def _keycloak_ssl_verify() -> "bool | str":
     """Return the ``verify`` parameter for requests to the Keycloak endpoint.
 
-    Prefers an explicit CA bundle, then fetches the cluster root CA from
-    kube-root-ca.crt.  Falls back to the default system CA store.
-    Never returns ``False``.
+    Prefers an explicit CA bundle, falls back to False for HTTPS URLs
+    (self-signed certs on OpenShift/HyperShift), or True for plain HTTP.
     """
     if os.environ.get("KEYCLOAK_CA_BUNDLE"):
         return os.environ["KEYCLOAK_CA_BUNDLE"]
-    if os.environ.get("KEYCLOAK_VERIFY_SSL", "true").lower() == "false":
-        from kagenti.tests.e2e.conftest import _fetch_openshift_ingress_ca
-
-        ca_path = _fetch_openshift_ingress_ca()
-        if ca_path:
-            return ca_path
+    if os.environ.get("KEYCLOAK_VERIFY_SSL", "").lower() == "false":
+        return False
+    keycloak_url = os.environ.get("KEYCLOAK_URL", "")
+    if keycloak_url.startswith("https"):
+        return False
     return True
 
 

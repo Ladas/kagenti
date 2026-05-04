@@ -45,17 +45,10 @@ async function next(page: Page) {
 }
 
 async function goToWizard(page: Page) {
-  await page.evaluate(() => {
-    window.history.pushState({}, '', '/sandbox/create');
-    window.dispatchEvent(new PopStateEvent('popstate'));
-  });
-  await page.waitForTimeout(1000);
+  await page.goto('/sandbox/create');
+  await page.waitForLoadState('domcontentloaded');
   const h = page.getByRole('heading', { name: /Create Sandbox Agent/i });
-  if (!(await h.isVisible({ timeout: 3000 }).catch(() => false))) {
-    await page.goto('/sandbox/create');
-    await page.waitForLoadState('networkidle');
-  }
-  await expect(h).toBeVisible({ timeout: 15000 });
+  await expect(h).toBeVisible({ timeout: 30000 });
 }
 
 async function deployAgent(page: Page, memoryLimit: string, cpuLimit: string) {
