@@ -27,9 +27,11 @@ import pytest
 import httpx
 import yaml
 from uuid import uuid4
+from a2a.client import ClientConfig, ClientFactory
 from a2a.types import (
     Message as A2AMessage,
     TextPart,
+    TaskArtifactUpdateEvent,
 )
 
 from kagenti.tests.e2e.conftest import _fetch_openshift_ingress_ca
@@ -145,54 +147,75 @@ def _get_ssl_context():
 
 
 async def _connect_to_agent(agent_url):
-    """Connect via non-streaming A2A client (more reliable than SSE)."""
+    """Connect via streaming-capable A2A client (SSE)."""
     ssl_verify = _get_ssl_context()
     httpx_client = httpx.AsyncClient(timeout=300.0, verify=ssl_verify)
+    config = ClientConfig(httpx_client=httpx_client)
 
-    from a2a.client import A2AClient
     from a2a.client.card_resolver import A2ACardResolver
 
     resolver = A2ACardResolver(httpx_client, agent_url)
     card = await resolver.get_agent_card()
     card.url = agent_url
-    client = A2AClient(httpx_client=httpx_client, url=agent_url)
+    client = await ClientFactory.connect(card, client_config=config)
     return client, card
 
 
+def _extract_text_from_artifacts(artifacts):
+    """Extract text from a list of A2A Artifact objects."""
+    text = ""
+    for artifact in artifacts or []:
+        for part in artifact.parts or []:
+            p = getattr(part, "root", part)
+            if hasattr(p, "text"):
+                text += p.text
+    return text
+
+
 async def _extract_response(client, message):
-    """Send an A2A message (non-streaming) and extract the text response.
+    """Send an A2A message via SSE streaming and extract the text response.
 
-    Uses the non-streaming send_message API which returns a direct JSON
-    response. This avoids SSE connection drops from OpenShift routes.
+    Uses the streaming send_message API which keeps the connection alive
+    via SSE heartbeat events. Detects task completion by checking for
+    terminal task states (completed/failed/canceled) and breaks the loop.
     """
-    from a2a.types import SendMessageRequest, MessageSendParams
-
-    params = MessageSendParams(message=message)
-    request = SendMessageRequest(id=uuid4().hex, params=params)
-    response = await asyncio.wait_for(
-        client.send_message(request), timeout=IDLE_TIMEOUT_S
-    )
-
-    root = getattr(response, "root", response)
-    if hasattr(root, "error") and root.error:
-        raise RuntimeError(f"A2A error: {root.error}")
-
-    result = getattr(root, "result", None)
-    if result is None:
-        return ""
-
     full_response = ""
-    if hasattr(result, "artifacts") and result.artifacts:
-        for artifact in result.artifacts:
-            for part in artifact.parts or []:
+
+    aiter = client.send_message(message).__aiter__()
+    while True:
+        try:
+            result = await asyncio.wait_for(aiter.__anext__(), timeout=IDLE_TIMEOUT_S)
+        except StopAsyncIteration:
+            break
+        except asyncio.TimeoutError:
+            break
+
+        if isinstance(result, tuple):
+            task, event = result
+
+            if isinstance(event, TaskArtifactUpdateEvent):
+                if hasattr(event, "artifact") and event.artifact:
+                    full_response += _extract_text_from_artifacts([event.artifact])
+
+            if task and task.artifacts:
+                text = _extract_text_from_artifacts(task.artifacts)
+                if text and not full_response:
+                    full_response = text
+
+            task_state = ""
+            if task and hasattr(task, "status") and task.status:
+                task_state = getattr(task.status, "state", "")
+                if hasattr(task_state, "value"):
+                    task_state = task_state.value
+            if task_state in ("completed", "failed", "canceled"):
+                break
+
+        elif isinstance(result, A2AMessage):
+            for part in result.parts or []:
                 p = getattr(part, "root", part)
                 if hasattr(p, "text"):
                     full_response += p.text
-    elif hasattr(result, "parts"):
-        for part in result.parts or []:
-            p = getattr(part, "root", part)
-            if hasattr(p, "text"):
-                full_response += p.text
+            break
 
     return full_response
 
