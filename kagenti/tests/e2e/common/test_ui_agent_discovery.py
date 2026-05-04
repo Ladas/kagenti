@@ -19,6 +19,8 @@ Environment Variables:
         OpenShift: https://kagenti-ui-kagenti-system.apps.cluster.example.com/api
 """
 
+import os
+
 import pytest
 import httpx
 
@@ -33,7 +35,7 @@ class TestUIAgentDiscovery:
 
         if openshift_ingress_ca:
             self._verify = ssl.create_default_context(cafile=openshift_ingress_ca)
-        elif is_openshift:
+        elif is_openshift or os.getenv("KAGENTI_UI_URL", "").startswith("https"):
             self._verify = False
         else:
             self._verify = True
@@ -225,7 +227,7 @@ class TestToolDiscovery:
 
         if openshift_ingress_ca:
             self._verify = ssl.create_default_context(cafile=openshift_ingress_ca)
-        elif is_openshift:
+        elif is_openshift or os.getenv("KAGENTI_UI_URL", "").startswith("https"):
             self._verify = False
         else:
             self._verify = True
