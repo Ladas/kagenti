@@ -611,7 +611,12 @@ class TestSandboxLegionMemory:
                 msg2 = A2AMessage(
                     role="user",
                     parts=[
-                        TextPart(text="Run this shell command: cat /tmp/myname.txt")
+                        TextPart(
+                            text=(
+                                "Run this shell command: cat /tmp/myname.txt "
+                                "and tell me the exact text contents of the file"
+                            )
+                        )
                     ],
                     messageId=uuid4().hex,
                     contextId=context_id,
