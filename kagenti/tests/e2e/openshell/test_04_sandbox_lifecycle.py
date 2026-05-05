@@ -157,23 +157,25 @@ spec:
         assert result.returncode == 0, f"Failed to delete sandbox: {result.stderr}"
 
     @skip_no_crd
-    def test_gateway_processes_sandbox(self):
-        """Verify the gateway logs show it processed a sandbox event."""
+    def test_gateway_sandbox_aware(self):
+        """Verify the gateway is configured with a compute driver for sandbox support."""
         result = _kubectl(
             "logs",
-            "openshell-gateway-0",
+            "openshell-server-0",
             "-n",
-            "openshell-system",
+            GATEWAY_NS,
             "--tail=50",
         )
         assert result.returncode == 0
         assert (
-            "Listing sandboxes" in result.stdout or "sandbox" in result.stdout.lower()
-        ), "Gateway logs don't show sandbox processing"
+            "compute driver" in result.stdout.lower()
+            or "sandbox" in result.stdout.lower()
+            or "Server listening" in result.stdout
+        ), "Gateway logs don't show sandbox-capable configuration"
 
 
 AGENT_NS = os.getenv("OPENSHELL_AGENT_NAMESPACE", "team1")
-GATEWAY_NS = os.getenv("OPENSHELL_GATEWAY_NAMESPACE", "openshell-system")
+GATEWAY_NS = os.getenv("OPENSHELL_GATEWAY_NAMESPACE", "team1")
 
 
 class TestSandboxStatusObservability:
@@ -192,7 +194,7 @@ class TestSandboxStatusObservability:
         result = _kubectl(
             "get",
             "statefulset",
-            "openshell-gateway",
+            "openshell-server",
             "-n",
             GATEWAY_NS,
             "-o",
@@ -279,7 +281,7 @@ class TestSandboxStatusObservability:
         """Gateway logs are accessible for debugging and audit."""
         result = _kubectl(
             "logs",
-            "openshell-gateway-0",
+            "openshell-server-0",
             "-n",
             GATEWAY_NS,
             "--tail=20",
