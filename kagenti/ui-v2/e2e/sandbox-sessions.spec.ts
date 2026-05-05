@@ -307,16 +307,9 @@ test.describe('Sandbox Sessions — Multi-Turn & Isolation', () => {
     await startNewSession(page);
     await snap(page, 'new-session-b');
 
-    // Extra wait for the new session context to fully initialise —
-    // the Send button must be enabled and the URL must NOT carry Session A's id.
-    await expect(async () => {
-      const currentSid = getSessionIdFromUrl(page);
-      expect(currentSid).not.toBe(sessionAId);
-    }).toPass({ timeout: 10000, intervals: [500, 1000, 2000] });
-
     // Wait for the new session context to fully initialise on the backend.
-    // Without this the first message may race against session creation,
-    // causing flaky failures where Session B inherits Session A's context.
+    // Session ID is assigned on first message, not on "New Session" click,
+    // so we verify the ID after sending the first message (line 327-329).
     await page.waitForTimeout(5000);
 
     // ---- Turn 1: Unique marker for Session B ----

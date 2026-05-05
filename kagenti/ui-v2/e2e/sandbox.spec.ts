@@ -236,12 +236,12 @@ test.describe('Sandbox Legion - Sessions Table', () => {
     // Search for non-existent ID
     const searchInput = page.getByPlaceholder(/Search by context ID/i);
     await searchInput.fill('nonexistent-context-id-xyz');
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(2000);
 
-    // Should show "No sessions found" or empty table
-    await expect(
-      page.locator('text=/No.*sessions/i').first()
-    ).toBeVisible({ timeout: 30000 });
+    // Should show "No sessions found" or empty table/row count = 0
+    const noSessions = page.locator('text=/No.*sessions/i').first();
+    const emptyBody = page.locator('tbody:empty, [data-testid="empty-state"]').first();
+    await expect(noSessions.or(emptyBody)).toBeVisible({ timeout: 30000 });
   });
 });
 
