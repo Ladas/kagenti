@@ -540,21 +540,19 @@ class TestSandboxLegionRCA:
 
             context_id = f"rca-{uuid4().hex[:8]}"
 
-            # Single turn: provide the log inline and ask for RCA
-            # Prompt asks to write to file to trigger tool_choice="any"
+            # Single turn: save the log to a file and grep for the error.
+            # Uses a single shell command to trigger tool_choice="any".
             msg = A2AMessage(
                 role="user",
                 parts=[
                     TextPart(
                         text=(
-                            "Save the following CI failure log to a file called "
-                            "ci_failure.log, then analyze it and write a root cause "
-                            "analysis to rca_report.txt that includes: "
-                            "(1) the exact error that caused the failure, "
-                            "(2) the root cause, "
-                            "(3) a specific fix recommendation. "
-                            "Then read rca_report.txt and show me the contents.\n\n"
-                            f"--- CI LOG ---\n{MOCK_CI_FAILURE_LOG}\n--- END LOG ---"
+                            "Run this shell command to save the CI log and find "
+                            "the error: echo '"
+                            + MOCK_CI_FAILURE_LOG.replace("'", "'\\''")
+                            + "' > /tmp/ci.log && grep -A 3 'ERROR\\|CrashLoop\\|api_key' /tmp/ci.log"
+                            "\n\nThen tell me: (1) what error caused the failure, "
+                            "(2) the root cause, (3) how to fix it."
                         )
                     )
                 ],
