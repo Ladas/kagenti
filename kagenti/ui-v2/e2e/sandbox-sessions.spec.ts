@@ -304,12 +304,18 @@ test.describe('Sandbox Sessions — Multi-Turn & Isolation', () => {
     await page.waitForTimeout(5000);
 
     // ---- Start Session B ----
+    // Navigate fresh to clear all frontend state from Session A
+    await page.goto('/sandbox');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(3000);
     await startNewSession(page);
     await snap(page, 'new-session-b');
 
+    // Verify URL is clean before sending first message
+    const preMessageSid = getSessionIdFromUrl(page);
+    console.log(`[isolation] Pre-message session param: "${preMessageSid}"`);
+
     // Wait for the new session context to fully initialise on the backend.
-    // Session ID is assigned on first message, not on "New Session" click,
-    // so we verify the ID after sending the first message (line 327-329).
     await page.waitForTimeout(5000);
 
     // ---- Turn 1: Unique marker for Session B ----
@@ -319,6 +325,7 @@ test.describe('Sandbox Sessions — Multi-Turn & Isolation', () => {
     );
     const sessionBId = await waitForSessionIdInUrl(page);
     expect(sessionBId).toBeTruthy();
+    console.log(`[isolation] Session A: ${sessionAId}, Session B: ${sessionBId}`);
     expect(sessionBId).not.toBe(sessionAId); // Different session
     await snap(page, 'session-b-turn1');
 
