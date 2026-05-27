@@ -334,10 +334,13 @@ if [ "$SKIP_AGENTS" = "false" ]; then
     TENANT_ARGS+=(--agents)
 fi
 
-for tenant in team1 team2; do
-    log_step "Deploying tenant: $tenant"
-    scripts/openshell/deploy-tenant.sh "$tenant" "${TENANT_ARGS[@]}"
-done
+# team1: full deployment with agents
+log_step "Deploying tenant: team1"
+scripts/openshell/deploy-tenant.sh "team1" "${TENANT_ARGS[@]}"
+
+# team2: gateway + LiteLLM only (no agents — saves CI resources)
+log_step "Deploying tenant: team2 (gateway only)"
+scripts/openshell/deploy-tenant.sh "team2"
 
 # ============================================================================
 set -euo pipefail
